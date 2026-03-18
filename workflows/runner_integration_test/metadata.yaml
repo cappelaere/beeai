@@ -1,0 +1,9 @@
+id: runner_integration_test
+hide_from_catalog: true
+name: Runner integration test
+description: Minimal BPMN workflow for automated runner/resume tests only.
+icon: 🧪
+category: Other
+estimated_duration: 1 second
+workflow_number: 999
+input_schema: {}

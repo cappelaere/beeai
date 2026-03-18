@@ -1,0 +1,101 @@
+<!-- Data Collection Form Template -->
+<div class="task-form-container">
+    <h3>Data Collection</h3>
+    
+    <form id="data-collection-form" class="task-form">
+        {% csrf_token %}
+        
+        <!-- Dynamic fields based on input_data.fields -->
+        {% if task.input_data.fields %}
+            {% for field in task.input_data.fields %}
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label for="field_{{ field.name }}" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                    {{ field.label }}
+                    {% if field.required %}<span style="color: #f44336;">*</span>{% endif %}
+                </label>
+                
+                {% if field.type == 'text' %}
+                    <input 
+                        type="text" 
+                        id="field_{{ field.name }}" 
+                        name="{{ field.name }}"
+                        {% if field.required %}required{% endif %}
+                        {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;"
+                    >
+                
+                {% elif field.type == 'number' %}
+                    <input 
+                        type="number" 
+                        id="field_{{ field.name }}" 
+                        name="{{ field.name }}"
+                        {% if field.required %}required{% endif %}
+                        {% if field.min %}min="{{ field.min }}"{% endif %}
+                        {% if field.max %}max="{{ field.max }}"{% endif %}
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;"
+                    >
+                
+                {% elif field.type == 'date' %}
+                    <input 
+                        type="date" 
+                        id="field_{{ field.name }}" 
+                        name="{{ field.name }}"
+                        {% if field.required %}required{% endif %}
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;"
+                    >
+                
+                {% elif field.type == 'select' %}
+                    <select 
+                        id="field_{{ field.name }}" 
+                        name="{{ field.name }}"
+                        {% if field.required %}required{% endif %}
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;"
+                    >
+                        <option value="">-- Select --</option>
+                        {% for option in field.options %}
+                        <option value="{{ option }}">{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                
+                {% elif field.type == 'checkbox' %}
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input 
+                            type="checkbox" 
+                            id="field_{{ field.name }}" 
+                            name="{{ field.name }}"
+                            value="true"
+                            style="margin-right: 0.5rem;"
+                        >
+                        <span>{{ field.help_text }}</span>
+                    </label>
+                
+                {% elif field.type == 'textarea' %}
+                    <textarea 
+                        id="field_{{ field.name }}" 
+                        name="{{ field.name }}"
+                        rows="{{ field.rows|default:4 }}"
+                        {% if field.required %}required{% endif %}
+                        {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.95rem;"
+                    ></textarea>
+                {% endif %}
+                
+                {% if field.help_text %}
+                <small style="color: #666; display: block; margin-top: 0.25rem;">
+                    {{ field.help_text }}
+                </small>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: #666; font-style: italic;">No fields defined for this data collection task.</p>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Form validation happens automatically via HTML5 required attributes
+    console.log('Data collection form initialized');
+});
+</script>

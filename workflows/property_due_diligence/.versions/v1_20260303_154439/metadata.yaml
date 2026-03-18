@@ -1,0 +1,16 @@
+id: property_due_diligence
+name: Property Due Diligence
+description: Automates comprehensive property research across multiple sources. Finds comparable sales, searches documents, checks compliance, and reviews auction history—all in parallel. Generates risk assessment and recommendations.
+icon: ⚙️
+workflow_number: 2
+documentation_path: workflows/property_due_diligence/documentation.md
+category: Property Analysis
+estimated_duration: 10-30 seconds
+
+input_schema:
+  property_id:
+    type: integer
+    required: true
+    label: Property ID
+    help_text: Property ID to research and analyze
+    placeholder: e.g., 12345

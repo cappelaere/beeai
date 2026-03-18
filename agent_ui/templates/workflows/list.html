@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Workflows{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}?v=2.1">
+{% endblock %}
+
+{% block content %}
+<div class="workflows-container">
+    <div class="page-header">
+        <div class="header-content">
+            <h1><i class="fas fa-diagram-project" aria-hidden="true"></i> Workflows</h1>
+            <p class="subtitle">Automate complex multi-step processes with AI-powered workflows</p>
+        </div>
+        {% if user_role == 'admin' %}
+        <a href="{% url 'workflow_studio' %}" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14"/>
+                <path d="M5 12h14"/>
+            </svg>
+            Create New Workflow
+        </a>
+        {% endif %}
+    </div>
+    
+    {% if workflows %}
+    <div class="workflows-grid">
+        {% for workflow in workflows %}
+        <div class="workflow-card">
+            <div class="workflow-card-header">
+                <div class="workflow-number">#{{ workflow.workflow_number }}</div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    {% if user_role == "admin" %}
+                    <a href="{% url 'workflow_edit' workflow.id %}" 
+                       class="workflow-star-btn" 
+                       aria-label="Edit workflow"
+                       title="Edit workflow"
+                       style="text-decoration: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                    </a>
+                    {% endif %}
+                    <button class="workflow-star-btn" 
+                            onclick="toggleWorkflowFavorite('{{ workflow.id }}')"
+                            data-workflow-id="{{ workflow.id }}"
+                            aria-label="Toggle favorite"
+                            title="Add to favorites">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </button>
+                    <div class="workflow-icon" aria-hidden="true">{{ workflow.icon }}</div>
+                </div>
+            </div>
+            <h3>{{ workflow.name }}</h3>
+            <p class="workflow-description">{{ workflow.description }}</p>
+            <div class="workflow-meta">
+                <span class="badge badge-{{ workflow.category|lower }}">{{ workflow.category }}</span>
+                <span class="duration" aria-label="Estimated duration">⏱ {{ workflow.estimated_duration }}</span>
+            </div>
+            <div class="workflow-actions">
+                <a href="{% url 'workflow_detail' workflow.id %}" class="btn btn-primary">
+                    Open Workflow →
+                </a>
+                {% if workflow.documentation_path %}
+                <a href="{% url 'workflow_documentation' workflow.id %}" class="btn btn-secondary">
+                    <i class="fas fa-book" aria-hidden="true"></i> Documentation
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        </svg>
+        <h2>No Workflows Available</h2>
+        <p>Workflows will appear here once they are registered in the system.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function getCsrfToken() {
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='));
+    return cookieValue ? cookieValue.split('=')[1] : '';
+}
+
+function toggleWorkflowFavorite(workflowId) {
+    const button = document.querySelector(`[data-workflow-id="${workflowId}"]`);
+    
+    fetch(`/api/workflows/${workflowId}/favorite/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Toggle visual state
+            if (data.is_favorite) {
+                button.classList.add('favorited');
+                button.setAttribute('title', 'Remove from favorites');
+            } else {
+                button.classList.remove('favorited');
+                button.setAttribute('title', 'Add to favorites');
+            }
+        } else {
+            alert('Error: ' + (data.error || 'Failed to toggle favorite'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to toggle favorite');
+    });
+}
+
+// Load favorite status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const favoriteWorkflows = JSON.parse('{{ favorite_workflows_json|safe }}' || '[]');
+    const favoriteIds = favoriteWorkflows.map(w => w.id);
+    
+    document.querySelectorAll('.workflow-star-btn').forEach(button => {
+        const workflowId = button.getAttribute('data-workflow-id');
+        if (favoriteIds.includes(workflowId)) {
+            button.classList.add('favorited');
+            button.setAttribute('title', 'Remove from favorites');
+        }
+    });
+});
+</script>
+
+<style>
+.workflows-container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.header-content {
+    flex: 1;
+}
+
+.page-header .btn {
+    flex-shrink: 0;
+    margin-top: 0.5rem;
+}
+
+.page-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.page-header h1 i {
+    color: #2196f3;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.workflows-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.workflow-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.workflow-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.workflow-star-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    color: #999;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.workflow-star-btn:hover {
+    color: #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.workflow-star-btn.favorited {
+    color: #ffc107;
+}
+
+.workflow-star-btn.favorited svg {
+    fill: #ffc107;
+}
+
+.workflow-star-btn svg {
+    display: block;
+}
+
+.workflow-number {
+    background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+}
+
+.workflow-icon {
+    font-size: 3rem;
+    line-height: 1;
+}
+
+.workflow-card h3 {
+    font-size: 1.25rem;
+    margin: 0 0 0.75rem 0;
+    color: #1a1a1a;
+}
+
+.workflow-description {
+    color: #555;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    flex-grow: 1;
+}
+
+.workflow-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.badge-compliance {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.badge-automation {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.badge-analysis {
+    background: #e8f5e9;
+    color: #388e3c;
+}
+
+.duration {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    transition: background-color 0.2s;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background: #2196f3;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1976d2;
+}
+
+.btn-secondary {
+    background: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+    background: #e8e8e8;
+    border-color: #ccc;
+}
+
+.workflow-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.workflow-actions .btn {
+    flex: 1;
+    min-width: 140px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #666;
+}
+
+.empty-state svg {
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.empty-state h2 {
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .workflows-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .workflows-container {
+        padding: 1rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+}
+</style>
+{% endblock %}

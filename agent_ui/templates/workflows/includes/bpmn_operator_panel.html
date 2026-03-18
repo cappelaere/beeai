@@ -1,0 +1,63 @@
+{# PAR-013: BPMN run diagnostics — expects bpmn_operator dict from build_operator_diagnostics #}
+{% if bpmn_operator %}
+<section class="detail-section bpmn-operator-diagnostics" aria-label="BPMN run diagnostics" style="margin: 1rem 0; padding: 1.25rem; background: #f5f9fc; border: 1px solid #b3d4fc; border-radius: 6px;">
+    <h2 style="margin: 0 0 0.5rem 0; font-size: 1.15rem;">BPMN run summary</h2>
+    {% if bpmn_operator.primary_state_label %}
+    <p style="margin: 0 0 0.75rem 0; font-weight: 600; color: #1565c0;">{{ bpmn_operator.primary_state_label }}</p>
+    {% endif %}
+    {% if bpmn_operator.headline %}
+    <p style="margin: 0 0 0.75rem 0;">{{ bpmn_operator.headline }}</p>
+    {% endif %}
+
+    {% if bpmn_operator.timeline_lines %}
+    <h3 style="margin: 1rem 0 0.5rem 0; font-size: 1rem;">Timeline</h3>
+    <ol style="margin: 0; padding-left: 1.25rem; font-size: 0.95rem; line-height: 1.5;">
+        {% for line in bpmn_operator.timeline_lines %}
+        <li style="margin: 0.35rem 0;">{{ line }}</li>
+        {% endfor %}
+    </ol>
+    {% endif %}
+
+    {% if bpmn_operator.retry_block %}
+    <div style="margin-top: 1rem; padding: 0.75rem; background: #fff8e1; border-radius: 4px; border-left: 4px solid #ff9800;">
+        <strong>Retry</strong>
+        <p style="margin: 0.35rem 0 0 0;">Task <code>{{ bpmn_operator.retry_block.task_id }}</code>
+            {% if bpmn_operator.retry_block.attempt is not None and bpmn_operator.retry_block.max_extra_retries is not None %}
+            — failure #{{ bpmn_operator.retry_block.attempt }} (max {{ bpmn_operator.retry_block.max_extra_retries }} extra retries after first try)
+            {% endif %}
+        </p>
+        {% if bpmn_operator.retry_block.last_error %}
+        <p style="margin: 0.35rem 0 0 0; font-size: 0.9rem; color: #555;">{{ bpmn_operator.retry_block.last_error }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if bpmn_operator.join_block %}
+    <p style="margin: 0.75rem 0 0 0;"><strong>Parallel join:</strong> {{ bpmn_operator.join_block }}</p>
+    {% endif %}
+
+    {% if bpmn_operator.parallel_context %}
+    <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem; color: #444;">{{ bpmn_operator.parallel_context }}</p>
+    {% endif %}
+
+    {% if bpmn_operator.terminal_block %}
+    <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fafafa; border-radius: 4px; white-space: pre-line; font-size: 0.92rem;">{{ bpmn_operator.terminal_block }}</div>
+    {% endif %}
+
+    {% if bpmn_operator.show_raw_metadata and progress_info and progress_info.condition_failure_metadata %}
+    <details style="margin-top: 1rem;">
+        <summary style="cursor: pointer; font-size: 0.9rem;">Technical details (gateway / condition)</summary>
+        <ul style="margin: 0.5rem 0 0 1rem; font-size: 0.85rem;">
+            {% for k, v in progress_info.condition_failure_metadata.items %}
+            <li><strong>{{ k }}:</strong> {{ v }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    <details style="margin-top: 0.75rem;">
+        <summary style="cursor: pointer; font-size: 0.85rem; color: #666;">Raw progress snapshot (support)</summary>
+        <pre style="margin: 0.5rem 0 0 0; font-size: 0.75rem; max-height: 14rem; overflow: auto; background: #fff; padding: 0.5rem; border: 1px solid #ddd;">{{ bpmn_progress_json }}</pre>
+    </details>
+</section>
+{% endif %}

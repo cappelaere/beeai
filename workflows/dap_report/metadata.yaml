@@ -1,0 +1,33 @@
+id: dap_report
+name: DAP report
+description: Simple DAP report based on user input of a date.  DAP Agent returns info for that data and an analysis.  If a problem is found it generate a user toast for analyst to resolve.
+documentation_path: workflows/dap_report/documentation.md
+icon: 📊
+category: Analysis
+version: "1.0"
+estimated_duration: "To be determined"
+
+input_schema:
+  report_date:
+    type: date
+    label: Report date
+    required: true
+    help_text: Date for the DAP report (YYYY-MM-DD). Use the calendar to pick.
+    placeholder: YYYY-MM-DD
+  lookback_days:
+    type: integer
+    label: Lookback days
+    required: false
+    default: 30
+    help_text: Number of days of history for time-series (1–365). Default 30.
+
+output_schema:
+  status:
+    type: string
+    description: Workflow execution status
+  message:
+    type: string
+    description: Human-readable result message
+  data:
+    type: object
+    description: Workflow output data

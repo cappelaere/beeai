@@ -1,0 +1,21 @@
+{% comment %}
+Default result fragment: generic key/value table from run.output_data.
+Used when no workflow-specific result template exists.
+{% endcomment %}
+{% load markdown_filters %}
+{% if run.output_data %}
+<div class="result-table">
+    <table class="data-table">
+        <tbody>
+            {% for key, value in run.output_data.items %}
+            <tr>
+                <th style="width: 200px;">{{ key }}</th>
+                <td>{% if key|is_markdown_key and value %}<div class="bi-brief-html">{{ value|markdown_to_html }}</div>{% else %}{{ value }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>No output data.</p>
+{% endif %}

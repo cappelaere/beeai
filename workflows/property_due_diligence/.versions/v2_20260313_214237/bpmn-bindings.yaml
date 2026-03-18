@@ -1,0 +1,21 @@
+# BPMN element → handler bindings for Property Due Diligence workflow
+# Used by the BPMN runner to invoke Python methods on PropertyDueDiligenceWorkflow.
+# Element IDs match the serviceTask ids in workflow.bpmn.
+# parallel_research runs comparable sales, documents, compliance, and auction history in parallel (asyncio.gather).
+
+workflow_id: property_due_diligence
+executor: workflows.property_due_diligence.workflow.PropertyDueDiligenceWorkflow
+
+serviceTasks:
+  get_property_details:
+    handler: get_property_details
+    description: Retrieve property details from GRES
+  parallel_research:
+    handler: parallel_research
+    description: Run comparable sales, document search, compliance check, auction history in parallel
+  assess_risks:
+    handler: assess_risks
+    description: Assign risk level (low/medium/high) from gathered data
+  generate_report:
+    handler: generate_report
+    description: Build findings summary and recommendations; workflow complete

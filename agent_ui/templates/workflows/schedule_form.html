@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}?v=2.1">
+{% endblock %}
+
+{% block content %}
+<div class="workflows-container">
+    <div class="page-header">
+        <div class="header-content">
+            <h1><i class="fas fa-clock" aria-hidden="true"></i> {{ page_title }}</h1>
+            <p class="subtitle">{% if schedule %}Edit schedule{% else %}Schedule a workflow to run once or on an interval{% endif %}</p>
+        </div>
+        <a href="{% url 'schedule_list' %}" class="btn btn-secondary">Back to Schedules</a>
+    </div>
+
+    <form id="schedule-form" class="schedule-form">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="workflow_id">Workflow <span class="required">*</span></label>
+            <select id="workflow_id" name="workflow_id" required>
+                <option value="">Select a workflow</option>
+                {% for w in workflows %}
+                <option value="{{ w.id }}" {% if preset_workflow_id == w.id %}selected{% endif %}>{{ w.name }} (#{{ w.workflow_number }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="run_name">Run name (optional)</label>
+            <input type="text" id="run_name" name="run_name" value="{{ schedule.run_name|default:'' }}" placeholder="e.g. Monthly report">
+        </div>
+        <div class="form-group">
+            <label for="input_data">Input variables (JSON object, optional)</label>
+            <textarea id="input_data" name="input_data" rows="4" placeholder='{"key": "value"}' class="form-control">{% if schedule %}{{ schedule_input_json }}{% else %}{}{% endif %}</textarea>
+            <small class="form-hint">Leave as {} or add workflow input keys and values.</small>
+        </div>
+        <div class="form-group">
+            <label>Schedule type <span class="required">*</span></label>
+            <div>
+                <label class="radio-inline"><input type="radio" name="schedule_type" value="once" {% if not schedule or schedule.schedule_type == 'once' %}checked{% endif %}> Once at a specific time</label>
+                <label class="radio-inline"><input type="radio" name="schedule_type" value="interval" {% if schedule and schedule.schedule_type == 'interval' %}checked{% endif %}> Repeating interval</label>
+            </div>
+        </div>
+        <div id="once-fields" class="form-group">
+            <label for="run_at">Run at (date and time) <span class="required">*</span></label>
+            <input type="datetime-local" id="run_at" name="run_at" step="60" value="{% if schedule.run_at %}{{ schedule.run_at|date:'Y-m-d' }}T{{ schedule.run_at|time:'H:i' }}{% endif %}">
+        </div>
+        <div id="interval-fields" class="form-group" style="display: none;">
+            <label for="interval_minutes">Interval (minutes) <span class="required">*</span></label>
+            <input type="number" id="interval_minutes" name="interval_minutes" min="1" value="{{ schedule.interval_minutes|default:60 }}" placeholder="60">
+            <label for="first_run_at" style="margin-top: 0.5rem;">First run at (optional)</label>
+            <input type="datetime-local" id="first_run_at" name="first_run_at" step="60">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-btn">{% if schedule %}Update schedule{% else %}Create schedule{% endif %}</button>
+            <a href="{% url 'schedule_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    var form = document.getElementById('schedule-form');
+    var scheduleTypeOnce = document.querySelector('input[name="schedule_type"][value="once"]');
+    var scheduleTypeInterval = document.querySelector('input[name="schedule_type"][value="interval"]');
+    var onceFields = document.getElementById('once-fields');
+    var intervalFields = document.getElementById('interval-fields');
+
+    // Prefill input_data from workflow detail page (Schedule button preserves form variables)
+    try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('workflow_id')) {
+            var preset = sessionStorage.getItem('schedule_preset_input');
+            if (preset) {
+                var inputDataEl = document.getElementById('input_data');
+                if (inputDataEl) inputDataEl.value = preset;
+                sessionStorage.removeItem('schedule_preset_input');
+            }
+        }
+    } catch (e) { /* ignore */ }
+
+    function toggleType() {
+        var isOnce = scheduleTypeOnce.checked;
+        onceFields.style.display = isOnce ? 'block' : 'none';
+        intervalFields.style.display = isOnce ? 'none' : 'block';
+    }
+    scheduleTypeOnce.addEventListener('change', toggleType);
+    scheduleTypeInterval.addEventListener('change', toggleType);
+    toggleType();
+
+    function getCsrfToken() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1].trim() : '';
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var workflowId = document.getElementById('workflow_id').value.trim();
+        var runName = document.getElementById('run_name').value.trim();
+        var inputDataStr = document.getElementById('input_data').value.trim() || '{}';
+        var scheduleType = document.querySelector('input[name="schedule_type"]:checked').value;
+        var payload = { workflow_id: workflowId, run_name: runName, schedule_type: scheduleType };
+
+        try {
+            payload.input_data = JSON.parse(inputDataStr);
+        } catch (err) {
+            alert('Input variables must be valid JSON');
+            return;
+        }
+
+        if (scheduleType === 'once') {
+            var runAt = document.getElementById('run_at').value;
+            if (!runAt) { alert('Run at is required'); return; }
+            payload.run_at = runAt + ':00.000Z';
+        } else {
+            var interval = parseInt(document.getElementById('interval_minutes').value, 10);
+            if (!interval || interval < 1) { alert('Interval must be at least 1 minute'); return; }
+            payload.interval_minutes = interval;
+            var firstRun = document.getElementById('first_run_at').value;
+            if (firstRun) payload.first_run_at = firstRun + ':00.000Z';
+        }
+
+        var submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        var url = '/api/workflows/schedules/';
+        var method = 'POST';
+        {% if schedule %}
+        url = '/api/workflows/schedules/{{ schedule.id }}/update/';
+        method = 'PATCH';
+        {% endif %}
+
+        fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+            body: JSON.stringify(payload)
+        }).then(function(r) {
+            return r.json().then(function(data) {
+                if (r.ok) {
+                    window.location.href = '{% url "schedule_list" %}';
+                } else {
+                    alert(data.error || 'Request failed');
+                    submitBtn.disabled = false;
+                }
+            });
+        }).catch(function() {
+            alert('Request failed');
+            submitBtn.disabled = false;
+        });
+    });
+})();
+</script>
+
+<style>
+.schedule-form { max-width: 600px; margin-top: 1.5rem; }
+.schedule-form .form-group { margin-bottom: 1.25rem; }
+.schedule-form label { display: block; font-weight: 500; margin-bottom: 0.35rem; }
+.schedule-form .required { color: #c00; }
+.schedule-form input[type="text"], .schedule-form input[type="number"], .schedule-form input[type="datetime-local"], .schedule-form select, .schedule-form textarea { width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+.schedule-form .radio-inline { display: inline-block; margin-right: 1rem; font-weight: normal; }
+.schedule-form .form-hint { display: block; margin-top: 0.25rem; color: #666; font-size: 0.9rem; }
+.form-actions { margin-top: 1.5rem; }
+.form-actions .btn { margin-right: 0.5rem; }
+</style>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ error_title|default:"Error" }} - RealtyIQ Agent{% endblock %}
+{% block content %}
+
+<div class="content-header">
+  <h2>{{ error_title|default:"Error" }}</h2>
+</div>
+
+<div class="error-container">
+  <div class="error-icon">⚠️</div>
+  <p class="error-message">{{ error_message|default:"An unexpected error occurred." }}</p>
+  
+  {% if back_url %}
+  <a href="{{ back_url }}" class="btn btn-primary">Go Back</a>
+  {% endif %}
+</div>
+
+<style>
+.error-container {
+  text-align: center;
+  padding: 3rem 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.error-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.error-message {
+  font-size: 1.125rem;
+  color: var(--gray-70);
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.btn {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 0.375rem;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--blue-60);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--blue-70);
+  color: white;
+}
+
+.theme-dark .error-message {
+  color: #a8a8a8;
+}
+</style>
+
+{% endblock %}

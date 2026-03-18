@@ -1,0 +1,78 @@
+{% load markdown_filters %}
+{% with data=run.output_data %}
+<div class="property-due-diligence-results">
+    {% if data %}
+    <section class="result-status-section">
+        <h3>Result</h3>
+        <span class="status-badge status-{{ data.status|default:'completed'|lower }}">{{ data.status|default:"Completed" }}</span>
+        {% if data.risk_level %}
+        <span class="risk-badge risk-{{ data.risk_level }}">Risk: {{ data.risk_level|title }}</span>
+        {% endif %}
+    </section>
+
+    {% if data.findings_summary %}
+    <section class="findings-section">
+        <h3>Findings Summary</h3>
+        <div class="findings-html">{{ data.findings_summary|markdown_to_html }}</div>
+    </section>
+    {% endif %}
+
+    {% if data.recommendations %}
+    <section class="recommendations-section">
+        <h3>Recommendations</h3>
+        <ul>
+            {% for rec in data.recommendations %}
+            <li>{{ rec }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if data.risk_factors %}
+    <section class="risk-factors-section">
+        <h3>Risk Factors</h3>
+        <ul>
+            {% for rf in data.risk_factors %}
+            <li>{{ rf }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if data.workflow_steps %}
+    <section class="steps-section">
+        <h3>Steps Completed</h3>
+        <ol>
+            {% for step in data.workflow_steps %}
+            <li>{{ step }}</li>
+            {% endfor %}
+        </ol>
+    </section>
+    {% endif %}
+
+    <details class="full-results-details">
+        <summary>View Full Output</summary>
+        <table class="data-table" style="margin-top: 1rem;">
+            <tbody>
+                {% for key, value in data.items %}
+                <tr>
+                    <th style="width: 200px;">{{ key }}</th>
+                    <td>
+                        {% if key == "findings_summary" and value %}
+                        <div class="bi-brief-html">{{ value|markdown_to_html }}</div>
+                        {% elif key == "property_details" or key == "compliance_checks" or key == "comparable_sales" or key == "documents_found" or key == "auction_history" %}
+                        <pre style="max-height: 200px; overflow: auto;">{{ value }}</pre>
+                        {% else %}
+                        {{ value }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% else %}
+    <p>No output data.</p>
+    {% endif %}
+</div>
+{% endwith %}

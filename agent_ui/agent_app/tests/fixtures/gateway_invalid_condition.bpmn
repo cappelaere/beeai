@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_invalid" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_invalid" isExecutable="true">
+    <bpmn:startEvent id="start"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="task1"/>
+    <bpmn:serviceTask id="task1" name="First"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="task1" targetRef="gw1"/>
+    <bpmn:exclusiveGateway id="gw1" default="flow_default"/>
+    <bpmn:sequenceFlow id="flow_cond" sourceRef="gw1" targetRef="task_a">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">state.user.id == 1</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_default" sourceRef="gw1" targetRef="task_b"/>
+    <bpmn:serviceTask id="task_a" name="A"/>
+    <bpmn:serviceTask id="task_b" name="B"/>
+    <bpmn:sequenceFlow id="fa" sourceRef="task_a" targetRef="end"/>
+    <bpmn:sequenceFlow id="fb" sourceRef="task_b" targetRef="end"/>
+    <bpmn:endEvent id="end"/>
+  </bpmn:process>
+</bpmn:definitions>

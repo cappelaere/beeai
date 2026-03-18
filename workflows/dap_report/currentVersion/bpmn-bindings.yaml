@@ -1,0 +1,21 @@
+# BPMN element → handler bindings
+# Runtime: workflow_id and executor identify the Python class; serviceTasks map each BPMN task to a handler method.
+workflow_id: dap_report
+executor: workflows.dap_report.workflow.DapReportWorkflow
+
+serviceTasks:
+  retrieve_data:
+    handler: retrieve_data
+    description: Retrieve DAP metrics for the report date via GRES Agent (auctions, bidding, engagement, revenue, compliance, system).
+    inputs: [report_date, user_id]
+    outputs: [dap_data]
+  create_time_series:
+    handler: create_time_series
+    description: Build time-series data over lookback window and compute trends (auctions, bids, revenue, compliance).
+    inputs: [report_date, lookback_days, dap_data]
+    outputs: [time_series_data, trends]
+  create_analysis:
+    handler: create_analysis
+    description: Run performance analysis via GRES Agent; produce summary, risk_level, highlights, concerns, recommendations.
+    inputs: [dap_data, time_series_data]
+    outputs: [analysis_results]

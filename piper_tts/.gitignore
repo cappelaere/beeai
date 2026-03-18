@@ -1,0 +1,31 @@
+# Audio cache
+audio/*.wav
+audio/*.mp3
+audio/.metadata.json
+
+# Keep directory structure
+!audio/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment
+.env
+.venv
+venv/

@@ -1,0 +1,7 @@
+workflow_id: par015_message_runner
+executor: workflows.par015_message_runner.workflow.Par015MessageRunnerWorkflow
+serviceTasks:
+  task_msg_a:
+    handler: task_msg_a
+  task_msg_b:
+    handler: task_msg_b

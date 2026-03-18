@@ -1,0 +1,17 @@
+id: runner_parallel_fj_test
+hide_from_catalog: true
+name: Runner parallel fork/join test
+description: Fork/join BPMN for automated runner integration tests only.
+icon: 🧪
+category: Other
+estimated_duration: 1 second
+workflow_number: 998
+input_schema:
+  type: object
+  properties:
+    pause_on_task_b:
+      type: boolean
+      default: false
+    fail_branch_b:
+      type: boolean
+      default: false

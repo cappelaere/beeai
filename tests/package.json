@@ -1,0 +1,30 @@
+{
+  "name": "realtyiq-tests",
+  "version": "1.0.0",
+  "description": "Test suite for RealtyIQ Agent UI",
+  "scripts": {
+    "test": "jest --passWithNoTests --forceExit",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --passWithNoTests",
+    "test:e2e": "playwright test --reporter=list",
+    "test:e2e:headed": "playwright test --headed --reporter=list",
+    "test:e2e:debug": "playwright test --debug"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@testing-library/dom": "^9.3.3",
+    "@testing-library/jest-dom": "^6.1.5",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": [
+      "**/tests/frontend/**/*.spec.js"
+    ],
+    "collectCoverageFrom": [
+      "agent_ui/static/js/**/*.js",
+      "!agent_ui/static/js/vendor/**"
+    ]
+  }
+}

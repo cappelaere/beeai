@@ -1,0 +1,16 @@
+workflow_id: runner_parallel_fj_test
+executor: workflows.runner_parallel_fj_test.workflow.RunnerParallelFjTestWorkflow
+
+serviceTasks:
+  task0:
+    handler: task0
+    description: "Before fork"
+  taskA:
+    handler: task_a
+    description: "Branch A"
+  taskB:
+    handler: task_b
+    description: "Branch B"
+  taskAfter:
+    handler: task_after
+    description: "After join"

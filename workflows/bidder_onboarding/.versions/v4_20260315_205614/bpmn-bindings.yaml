@@ -1,0 +1,32 @@
+workflow_id: bidder_onboarding
+executor: workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow
+serviceTasks:
+  validate_input:
+    handler: validate_input
+    description: Validate bidder name, property ID, and registration data (terms,
+      age)
+  check_property_status:
+    handler: check_property_status
+    description: Verify property is active and accepting registrations
+  check_sam_compliance:
+    handler: check_sam_compliance
+    description: Screen bidder against SAM.gov exclusions database
+  check_ofac_compliance:
+    handler: check_ofac_compliance
+    description: Screen bidder against OFAC SDN list with fuzzy matching
+  determine_eligibility:
+    handler: determine_eligibility
+    description: Combine SAM/OFAC results; always route to human review
+  request_human_review:
+    handler: request_human_review
+    description: Create human task and pause workflow (TaskPendingException)
+  process_human_review:
+    handler: process_human_review
+    description: Apply human decision (approve/deny); supports override of automated
+      checks
+  finalize_status:
+    handler: finalize_status
+    description: Set bid limit if approved, build status message and notification
+  create_audit_log:
+    handler: create_audit_log
+    description: Create comprehensive audit trail and end workflow

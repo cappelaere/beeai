@@ -1,0 +1,1465 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Edit: {{ workflow.name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}?v=2.2">
+<style>
+.workflow-editor {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 1.5rem 2rem !important;
+    box-sizing: border-box;
+    min-width: 1400px;
+}
+.workflow-editor * { box-sizing: border-box; }
+.editor-content {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 1400px;
+    overflow: visible;
+}
+.form-group textarea,
+.form-group input[type="text"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+#description {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 140px;
+    display: block;
+}
+.edit-section.edit-diagram {
+    margin-bottom: 0;
+    padding: 1.5rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+}
+.edit-section.edit-diagram .form-text {
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+}
+.edit-section.edit-diagram iframe {
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.edit-section {
+    margin-bottom: 2rem;
+}
+.edit-section.edit-metadata {
+    padding: 1.5rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+.edit-section.edit-metadata .form-control,
+.edit-section.edit-metadata .form-select {
+    border-radius: 6px;
+    border-color: #ced4da;
+}
+.edit-section h2.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #212529;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.workflow-editor label,
+.workflow-editor .form-group label,
+#version-dialog label,
+.edit-section label,
+.form-group label {
+    font-weight: 700 !important;
+}
+
+.workflow-header-divider {
+    margin: 1rem 0 1.5rem;
+    border: 0;
+    border-top: 2px solid #e0e0e0;
+}
+.content-html {
+    min-height: 200px;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+.content-html h1, .content-html h2, .content-html h3 { margin-top: 1em; margin-bottom: 0.5em; }
+.content-html ul, .content-html ol { margin-left: 1.5em; }
+.content-html pre, .content-html code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; }
+.content-html pre { padding: 1em; overflow-x: auto; }
+.content-html pre code { padding: 0; background: none; }
+
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.editor-header-left h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+    color: #1a1a1a;
+}
+
+.editor-header-left .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.editor-header-left .breadcrumb a {
+    color: #2196f3;
+    text-decoration: none;
+}
+
+.editor-header-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.version-info {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.editor-content {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    min-height: 500px;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.code-editor {
+    width: 100%;
+    min-height: 500px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 1rem;
+    background: #f8f9fa;
+    resize: vertical;
+}
+
+/* Version Dialog - use native <dialog> for reliable top-layer display */
+#version-dialog {
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    max-width: 500px;
+    width: 90%;
+}
+#version-dialog::backdrop {
+    background: rgba(0,0,0,0.5);
+}
+
+#version-dialog .modal-content {
+    margin: 0 0 1rem 0;
+    color: #1a1a1a;
+}
+
+.modal-content .form-group {
+    margin-bottom: 1rem;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+}
+
+.diagram-layout {
+    display: flex;
+    align-items: stretch;
+    position: relative;
+    min-height: 900px;
+    height: 85vh;
+}
+
+.diagram-canvas {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.diagram-canvas #bpmn-editor-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+}
+
+.diagram-sidebar-resizer {
+    flex: 0 0 8px;
+    width: 8px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    margin: 0 -4px;
+    z-index: 1;
+}
+.diagram-sidebar-resizer:hover,
+.diagram-sidebar-resizer.dragging {
+    background: rgba(13, 110, 253, 0.15);
+}
+.diagram-sidebar-resizer::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+    border-radius: 1px;
+}
+.diagram-sidebar-resizer:hover::after,
+.diagram-sidebar-resizer.dragging::after {
+    background: #0d6efd;
+    width: 3px;
+    left: 2px;
+}
+
+.diagram-sidebar {
+    width: 420px;
+    min-width: 280px;
+    max-width: 720px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.sidebar-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.sidebar-card h3 {
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
+}
+
+/* Collapsible sidebar sections */
+.sidebar-card.collapsible .sidebar-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin: 0 0 0.75rem 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    border-radius: 4px;
+}
+.sidebar-card.collapsible .sidebar-card-header:hover {
+    background: rgba(0,0,0,0.04);
+}
+.sidebar-card.collapsible .sidebar-card-chevron {
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+    transition: transform 0.2s ease;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+.sidebar-card.collapsible.collapsed .sidebar-card-chevron {
+    transform: rotate(-90deg);
+}
+.sidebar-card.collapsible .sidebar-card-body {
+    overflow: hidden;
+    transition: opacity 0.15s ease;
+}
+.sidebar-card.collapsible.collapsed .sidebar-card-body {
+    display: none;
+}
+
+.sidebar-note {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.field-help {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.validation-list {
+    margin: 0.5rem 0 0 1.1rem;
+    padding: 0;
+}
+
+.validation-list li {
+    margin-bottom: 0.35rem;
+}
+
+.copilot-messages {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    min-height: 280px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 0.75rem;
+}
+
+.copilot-message {
+    margin-bottom: 0.75rem;
+}
+
+.copilot-message-role {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #495057;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.copilot-message-body {
+    white-space: pre-wrap;
+    background: #fff;
+    border-radius: 6px;
+    line-height: 1.5;
+}
+
+.copilot-message.user .copilot-message-body {
+    background: #eef6ff;
+    border: 1px solid #cfe2ff;
+    padding: 0.6rem 0.75rem;
+}
+
+.copilot-message.assistant .copilot-message-body {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    padding: 0.6rem 0.75rem;
+}
+
+/* Markdown-rendered HTML in BPMN Expert responses */
+.copilot-message.assistant .copilot-message-body h1,
+.copilot-message.assistant .copilot-message-body h2,
+.copilot-message.assistant .copilot-message-body h3,
+.copilot-message.assistant .copilot-message-body h4 {
+    margin: 0.75rem 0 0.35rem 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+.copilot-message.assistant .copilot-message-body h1 { font-size: 1.25rem; }
+.copilot-message.assistant .copilot-message-body h2 { font-size: 1.1rem; }
+.copilot-message.assistant .copilot-message-body h3,
+.copilot-message.assistant .copilot-message-body h4 { font-size: 1rem; }
+.copilot-message.assistant .copilot-message-body p {
+    margin: 0 0 0.5rem 0;
+}
+.copilot-message.assistant .copilot-message-body ul,
+.copilot-message.assistant .copilot-message-body ol {
+    margin: 0.35rem 0 0.5rem 1rem;
+    padding-left: 1rem;
+}
+.copilot-message.assistant .copilot-message-body li {
+    margin-bottom: 0.2rem;
+}
+.copilot-message.assistant .copilot-message-body code {
+    background: #f1f3f4;
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+.copilot-message.assistant .copilot-message-body pre {
+    background: #f1f3f4;
+    padding: 0.75rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0.5rem 0;
+}
+.copilot-message.assistant .copilot-message-body pre code {
+    background: none;
+    padding: 0;
+}
+.copilot-message.assistant .copilot-message-body blockquote {
+    border-left: 4px solid #dee2e6;
+    margin: 0.5rem 0;
+    padding-left: 0.75rem;
+    color: #495057;
+}
+.copilot-message.assistant .copilot-message-body a {
+    color: #0d6efd;
+}
+.copilot-message.assistant .copilot-message-body table {
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+}
+.copilot-message.assistant .copilot-message-body th,
+.copilot-message.assistant .copilot-message-body td {
+    border: 1px solid #dee2e6;
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+}
+.copilot-message.assistant .copilot-message-body th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.copilot-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.75rem 0;
+}
+
+.copilot-actions .btn {
+    white-space: nowrap;
+}
+
+#copilot-prompt-input {
+    min-height: 96px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="workflow-editor">
+    <div class="editor-header">
+        <div class="editor-header-left">
+            <div class="breadcrumb">
+                <a href="{% url 'workflows_list' %}">Workflows</a>
+                <span>/</span>
+                <a href="{% url 'workflow_detail' workflow.id %}">{{ workflow.name }}</a>
+                <span>/</span>
+                <span>Edit</span>
+            </div>
+            <h1>Edit: {{ workflow.name }}</h1>
+            {% if current_version %}
+            <div class="version-info">
+                Version #{{ current_version.version_number }}{% if current_version.version_tag %} · Tag: {{ current_version.version_tag }}{% endif %}
+                &nbsp;|&nbsp; {{ version_count }} version{{ version_count|pluralize }} total
+            </div>
+            {% endif %}
+        </div>
+        <div class="editor-header-right">
+            <a href="{% url 'workflow_user_story' workflow.id %}" class="btn btn-sm btn-outline-primary rounded-pill" target="_blank" rel="noopener">User Story</a>
+            <a href="{% url 'workflow_documentation' workflow.id %}" class="btn btn-sm btn-outline-primary rounded-pill" target="_blank" rel="noopener">Documentation</a>
+            <a href="{% url 'workflow_versions' workflow.id %}" class="btn btn-sm btn-outline-secondary rounded-pill">
+                Version History
+            </a>
+            <button type="button" id="save-version-open-btn" class="btn btn-primary rounded-pill">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 0.5rem;">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                Save & Version
+            </button>
+        </div>
+    </div>
+
+    <hr class="workflow-header-divider">
+
+    <div class="editor-content">
+        <section class="edit-section edit-metadata" aria-labelledby="metadata-title">
+            <h2 id="metadata-title" class="section-title">Workflow metadata</h2>
+            <form id="metadata-form">
+                <div class="form-group">
+                    <label for="name" class="fw-bold">Workflow Name</label>
+                    <input class="form-control" type="text" id="name" name="name" value="{{ workflow.name }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="description" class="fw-bold">Description</label>
+                    <textarea class="form-control" id="description" name="description" required>{{ workflow.description }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="category" class="fw-bold">Category</label>
+                    <select class="form-select" id="category" name="category">
+                        <option value="Compliance" {% if workflow.category == "Compliance" %}selected{% endif %}>Compliance</option>
+                        <option value="Verification" {% if workflow.category == "Verification" %}selected{% endif %}>Verification</option>
+                        <option value="Analysis" {% if workflow.category == "Analysis" %}selected{% endif %}>Analysis</option>
+                        <option value="Approval" {% if workflow.category == "Approval" %}selected{% endif %}>Approval</option>
+                        <option value="Automation" {% if workflow.category == "Automation" %}selected{% endif %}>Automation</option>
+                        <option value="Other" {% if workflow.category == "Other" %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="estimated_duration" class="fw-bold">Estimated Duration</label>
+                    <input class="form-control" type="text" id="estimated_duration" name="estimated_duration" value="{{ workflow.estimated_duration }}">
+                </div>
+            </form>
+        </section>
+        <section class="edit-section edit-diagram" aria-labelledby="diagram-title">
+            <h2 id="diagram-title" class="section-title">Diagram editor</h2>
+            <p class="form-text text-muted">Use the palette on the left to add tasks, events, and gateways; drag to move; double-click to label.</p>
+            <div class="diagram-layout" id="diagram-layout">
+                <div class="diagram-canvas">
+                    <textarea id="bpmn-xml-code" style="display:none;" aria-hidden="true">{{ file_contents_bpmn_xml|escape }}</textarea>
+                    <iframe id="bpmn-editor-frame" src="{% url 'workflow_diagram_editor_frame' workflow.id %}?v=3" style="width:100%;min-width:1100px;border:1px solid #dee2e6;border-radius:6px;background:#fff;display:block;" title="BPMN diagram editor"></iframe>
+                </div>
+                <div class="diagram-sidebar-resizer" id="diagram-sidebar-resizer" role="separator" aria-orientation="vertical" title="Drag to resize panel"></div>
+                <aside class="diagram-sidebar" id="diagram-sidebar" aria-label="BPMN Expert tools">
+                    <div class="sidebar-card collapsible" id="sidebar-runtime" data-collapsible-key="runtime">
+                        <button type="button" class="sidebar-card-header" aria-expanded="true">
+                            <span class="sidebar-card-title">Runtime (from bpmn-bindings.yaml)</span>
+                            <span class="sidebar-card-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="sidebar-card-body">
+                        <div class="form-group">
+                            <label>Workflow ID</label>
+                            <input type="text" id="runtime-workflow-id" readonly class="form-control form-control-sm" placeholder="—">
+                        </div>
+                        <div class="form-group">
+                            <label>Executor</label>
+                            <input type="text" id="runtime-executor" readonly class="form-control form-control-sm" placeholder="—">
+                        </div>
+                        <p class="sidebar-note" style="margin-top:0.5rem;font-size:0.85rem;">Top-level <code>workflow_id</code> and <code>executor</code> from the binding file. Task-level handler, description, inputs, and outputs below.</p>
+                        </div>
+                    </div>
+                    <div class="sidebar-card collapsible" id="sidebar-selected-task" data-collapsible-key="selected-task">
+                        <button type="button" class="sidebar-card-header" aria-expanded="true">
+                            <span class="sidebar-card-title">Selected BPMN Task</span>
+                            <span class="sidebar-card-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="sidebar-card-body">
+                        <div class="form-group">
+                            <label for="selected-element-id">Element ID</label>
+                            <input type="text" id="selected-element-id" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="selected-element-name">Element Name</label>
+                            <input type="text" id="selected-element-name" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="selected-element-type">Element Type</label>
+                            <input type="text" id="selected-element-type" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="selected-element-handler">Handler</label>
+                            <input type="text" id="selected-element-handler" placeholder="Python handler name for this task">
+                            <div class="field-help">Service tasks are synced into `bpmn-bindings.yaml` on save.</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="selected-element-description">Binding Description</label>
+                            <textarea id="selected-element-description" rows="3" placeholder="What this task should do"></textarea>
+                        </div>
+                        <div class="form-group" id="selected-element-inputs-group">
+                            <label for="selected-element-inputs">Inputs</label>
+                            <input type="text" id="selected-element-inputs" placeholder="Comma-separated inputs">
+                        </div>
+                        <div class="form-group" id="selected-element-outputs-group">
+                            <label for="selected-element-outputs">Outputs</label>
+                            <input type="text" id="selected-element-outputs" placeholder="Comma-separated outputs">
+                        </div>
+                        <div class="form-group" id="selected-element-error-handling-group">
+                            <h4 class="sidebar-subheading" style="margin-bottom:0.5rem;font-size:0.95rem;">Error handling</h4>
+                            <div class="form-group">
+                                <label for="selected-element-timeout">Timeout (seconds)</label>
+                                <input type="number" id="selected-element-timeout" min="0" step="1" placeholder="e.g. 30 (leave empty for no limit)">
+                                <div class="field-help">Max seconds for this task; empty = no timeout.</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="selected-element-retries">Retries</label>
+                                <input type="number" id="selected-element-retries" min="0" step="1" placeholder="e.g. 3 (leave empty for 0)">
+                                <div class="field-help">Number of retries on failure; empty = 0.</div>
+                            </div>
+                        </div>
+                        <button type="button" id="update-selected-binding-btn" class="btn btn-outline-primary btn-sm">Update Binding Draft</button>
+                        <div id="selected-element-note" class="sidebar-note" style="margin-top:0.75rem;">Select a BPMN element to inspect or bind it.</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-card collapsible" id="workflow-inputs-card" style="display:none;" data-collapsible-key="workflow-inputs">
+                        <button type="button" class="sidebar-card-header" aria-expanded="true">
+                            <span class="sidebar-card-title">Workflow inputs (start)</span>
+                            <span class="sidebar-card-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="sidebar-card-body">
+                        <p class="sidebar-note" style="margin-bottom:0.75rem;">Parameters the user supplies when running this workflow. Name and type only. Saved to <code>metadata.yaml</code> → <code>input_schema</code>.</p>
+                        <div id="workflow-inputs-list"></div>
+                        <button type="button" id="workflow-add-input-btn" class="btn btn-outline-secondary btn-sm mt-2">Add input</button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-card collapsible" id="workflow-outputs-card" style="display:none;" data-collapsible-key="workflow-outputs">
+                        <button type="button" class="sidebar-card-header" aria-expanded="true">
+                            <span class="sidebar-card-title">Workflow outputs (end)</span>
+                            <span class="sidebar-card-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="sidebar-card-body">
+                        <p class="sidebar-note" style="margin-bottom:0.75rem;">Outputs this workflow produces. Name and type only. Saved to <code>metadata.yaml</code> → <code>outputs</code>.</p>
+                        <div id="workflow-outputs-list"></div>
+                        <button type="button" id="workflow-add-output-btn" class="btn btn-outline-secondary btn-sm mt-2">Add output</button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-card collapsible" id="sidebar-validation" data-collapsible-key="validation">
+                        <button type="button" class="sidebar-card-header" aria-expanded="true">
+                            <span class="sidebar-card-title">BPMN Validation</span>
+                            <span class="sidebar-card-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="sidebar-card-body">
+                        <div id="bindings-validation-summary" class="sidebar-note">Validation information will appear here.</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-card collapsible" id="sidebar-copilot" data-collapsible-key="copilot">
+                        <button type="button" class="sidebar-card-header" aria-expanded="true">
+                            <span class="sidebar-card-title">BPMN Expert</span>
+                            <span class="sidebar-card-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="sidebar-card-body">
+                        <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem;">
+                            <a href="{% url 'chat' %}?agent=bpmn_expert" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">Open In Chat</a>
+                        </div>
+                        <p class="sidebar-note" style="margin-top:0;margin-bottom:0.5rem;">Ask about the selected task, validate the diagram, or request handler and binding proposals.</p>
+                        <div class="copilot-actions">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-copilot-prompt="Explain the selected BPMN element and how it fits into this workflow.">Explain Selection</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-copilot-prompt="Validate this workflow's BPMN bindings and call out any mismatches with workflow.py.">Validate Bindings</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-copilot-prompt="Propose a handler stub and binding entry for the selected BPMN task.">Generate Stub</button>
+                        </div>
+                        <div id="copilot-messages" class="copilot-messages" aria-live="polite"></div>
+                        <form id="copilot-form" style="margin-top:0.75rem;">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label for="copilot-prompt-input">Ask BPMN Expert</label>
+                                <textarea id="copilot-prompt-input" rows="4" placeholder="Ask about this workflow, request a proposal, or ask the expert to apply a confirmed change."></textarea>
+                            </div>
+                            <button type="submit" id="copilot-send-btn" class="btn btn-primary">Send To BPMN Expert</button>
+                        </form>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- Version Save Dialog: native <dialog> uses browser top-layer (always visible) -->
+<dialog id="version-dialog" aria-labelledby="version-dialog-title">
+    <div class="modal-content">
+        <h3 id="version-dialog-title">Save New Version</h3>
+        <div class="form-group">
+            <label for="version-comment" class="fw-bold">What changed in this version?</label>
+            <textarea class="form-control" id="version-comment" placeholder="Describe the changes you made..." rows="3"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="version-tag" class="fw-bold">Version Tag (Optional)</label>
+            <input class="form-control" type="text" id="version-tag" placeholder="e.g., v1.0, stable, production">
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline-secondary" id="version-dialog-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="version-dialog-save">Save Version</button>
+        </div>
+    </div>
+</dialog>
+
+<script>
+const workflowId = '{{ workflow.id|escapejs }}';
+const workflowInputSchema = (function(){ try { return JSON.parse("{{ workflow_input_schema_json|escapejs }}"); } catch(e){ return {}; } })();
+const workflowOutputsJson = (function(){ try { return JSON.parse("{{ workflow_outputs_json|escapejs }}"); } catch(e){ return []; } })();
+let bindingsState = JSON.parse("{{ initial_bindings_json|escapejs }}");
+let bindingsValidation = JSON.parse("{{ bindings_validation_json|escapejs }}");
+let selectedElement = null;
+let copilotSessionId = null;
+
+// Editable workflow inputs (start) and outputs (end): [{name: string, type: string}]
+let workflowInputsList = [];
+let workflowOutputsList = [];
+function initWorkflowInputsOutputsFromSchema() {
+    workflowInputsList = Object.entries(workflowInputSchema || {}).map(function(e) { return { name: e[0], type: (e[1] && e[1].type) ? e[1].type : 'string' }; });
+    workflowOutputsList = Array.isArray(workflowOutputsJson) ? workflowOutputsJson.map(function(o) { return { name: (o && o.name) ? o.name : '', type: (o && o.type) ? o.type : 'string' }; }) : [];
+}
+initWorkflowInputsOutputsFromSchema();
+
+const INPUT_OUTPUT_TYPES = ['string', 'integer', 'date', 'checkbox', 'select', 'email', 'object'];
+
+if (!bindingsState || typeof bindingsState !== 'object') {
+    bindingsState = {};
+}
+if (!bindingsState.serviceTasks || typeof bindingsState.serviceTasks !== 'object') {
+    bindingsState.serviceTasks = {};
+}
+
+function getCsrfToken() {
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='));
+    return cookieValue ? cookieValue.split('=')[1] : '';
+}
+
+function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value || '';
+    return div.innerHTML;
+}
+
+function parseCommaList(value) {
+    return (value || '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+}
+
+function getBindingForSelectedTask() {
+    if (!selectedElement || selectedElement.type !== 'serviceTask') {
+        return null;
+    }
+    return bindingsState.serviceTasks[selectedElement.id] || {};
+}
+
+function renderRuntimeFromBindings() {
+    const wfEl = document.getElementById('runtime-workflow-id');
+    const execEl = document.getElementById('runtime-executor');
+    if (wfEl) wfEl.value = (bindingsState && bindingsState.workflow_id) ? bindingsState.workflow_id : '';
+    if (execEl) execEl.value = (bindingsState && bindingsState.executor) ? bindingsState.executor : '';
+}
+
+function renderBindingsValidation() {
+    const container = document.getElementById('bindings-validation-summary');
+    if (!container) {
+        return;
+    }
+    const errors = (bindingsValidation && bindingsValidation.errors) || [];
+    const warnings = (bindingsValidation && bindingsValidation.warnings) || [];
+    const suggestions = (bindingsValidation && bindingsValidation.suggestions) || [];
+    let html = '';
+    if (!errors.length && !warnings.length) {
+        html += '<div class="sidebar-note">No binding mismatches detected in the last validation.</div>';
+    } else {
+        if (errors.length) {
+            html += '<strong>Errors</strong><ul class="validation-list">' +
+                errors.map(item => '<li>' + escapeHtml(item) + '</li>').join('') +
+                '</ul>';
+        }
+        if (warnings.length) {
+            html += '<strong>Warnings</strong><ul class="validation-list">' +
+                warnings.map(item => '<li>' + escapeHtml(item) + '</li>').join('') +
+                '</ul>';
+        }
+    }
+    if (suggestions.length) {
+        html += '<strong>Suggestions</strong><ul class="validation-list">' +
+            suggestions.map(item => '<li>' + escapeHtml(item) + '</li>').join('') +
+            '</ul>';
+    }
+    container.innerHTML = html || '<div class="sidebar-note">Validation information will appear here.</div>';
+}
+
+function renderSelectedElementPanel() {
+    const idEl = document.getElementById('selected-element-id');
+    const nameEl = document.getElementById('selected-element-name');
+    const typeEl = document.getElementById('selected-element-type');
+    const handlerEl = document.getElementById('selected-element-handler');
+    const descEl = document.getElementById('selected-element-description');
+    const inputsEl = document.getElementById('selected-element-inputs');
+    const outputsEl = document.getElementById('selected-element-outputs');
+    const timeoutEl = document.getElementById('selected-element-timeout');
+    const retriesEl = document.getElementById('selected-element-retries');
+    const errorHandlingGroup = document.getElementById('selected-element-error-handling-group');
+    const noteEl = document.getElementById('selected-element-note');
+
+    if (!idEl || !nameEl || !typeEl) return;
+
+    if (!selectedElement) {
+        idEl.value = '';
+        nameEl.value = '';
+        typeEl.value = '';
+        if (handlerEl) handlerEl.value = '';
+        if (descEl) descEl.value = '';
+        if (inputsEl) inputsEl.value = '';
+        if (outputsEl) outputsEl.value = '';
+        if (timeoutEl) timeoutEl.value = '';
+        if (retriesEl) retriesEl.value = '';
+        if (handlerEl) handlerEl.disabled = true;
+        if (descEl) descEl.disabled = true;
+        if (inputsEl) inputsEl.disabled = true;
+        if (outputsEl) outputsEl.disabled = true;
+        if (timeoutEl) timeoutEl.disabled = true;
+        if (retriesEl) retriesEl.disabled = true;
+        if (noteEl) noteEl.textContent = 'Select a BPMN element to inspect or bind it.';
+        var wic = document.getElementById('workflow-inputs-card');
+        var woc = document.getElementById('workflow-outputs-card');
+        if (wic) wic.style.display = 'none';
+        if (woc) woc.style.display = 'none';
+        var ig = document.getElementById('selected-element-inputs-group');
+        var og = document.getElementById('selected-element-outputs-group');
+        if (ig) ig.style.display = '';
+        if (og) og.style.display = '';
+        if (errorHandlingGroup) errorHandlingGroup.style.display = 'none';
+        return;
+    }
+
+    idEl.value = selectedElement.id || '';
+    nameEl.value = selectedElement.name || '';
+    typeEl.value = selectedElement.type || '';
+
+    try {
+        const isStart = selectedElement.type === 'startEvent' || (selectedElement.type && selectedElement.type.toLowerCase().indexOf('start') !== -1);
+        const isEnd = selectedElement.type === 'endEvent' || (selectedElement.type && selectedElement.type.toLowerCase().indexOf('end') !== -1);
+        const editable = selectedElement.type === 'serviceTask';
+        const binding = getBindingForSelectedTask() || {};
+        if (handlerEl) { handlerEl.value = binding.handler || ''; handlerEl.disabled = !editable; }
+        if (descEl) { descEl.value = binding.description || ''; descEl.disabled = !editable; }
+        if (inputsEl) { inputsEl.value = Array.isArray(binding.inputs) ? binding.inputs.join(', ') : ''; inputsEl.disabled = !editable; }
+        if (outputsEl) { outputsEl.value = Array.isArray(binding.outputs) ? binding.outputs.join(', ') : ''; outputsEl.disabled = !editable; }
+        if (timeoutEl) {
+            var t = binding.timeout_seconds;
+            timeoutEl.value = (t !== undefined && t !== null && t !== '') ? String(Number(t)) : '';
+            timeoutEl.disabled = !editable;
+        }
+        if (retriesEl) {
+            var r = binding.retries;
+            retriesEl.value = (r !== undefined && r !== null && r !== '') ? String(Number(r)) : '';
+            retriesEl.disabled = !editable;
+        }
+        var inputsGroup = document.getElementById('selected-element-inputs-group');
+        var outputsGroup = document.getElementById('selected-element-outputs-group');
+        if (inputsGroup) inputsGroup.style.display = (isStart || isEnd) ? 'none' : '';
+        if (outputsGroup) outputsGroup.style.display = (isStart || isEnd) ? 'none' : '';
+        if (errorHandlingGroup) errorHandlingGroup.style.display = editable ? '' : 'none';
+        if (noteEl) noteEl.textContent = editable
+            ? 'This draft binding will be saved into bpmn-bindings.yaml when you save the workflow.'
+            : 'Bindings are only editable for BPMN service tasks.';
+
+        var inputsCard = document.getElementById('workflow-inputs-card');
+        var outputsCard = document.getElementById('workflow-outputs-card');
+        if (inputsCard) inputsCard.style.display = isStart ? 'block' : 'none';
+        if (outputsCard) outputsCard.style.display = isEnd ? 'block' : 'none';
+        if (isStart && typeof renderWorkflowInputsList === 'function') renderWorkflowInputsList();
+        if (isEnd && typeof renderWorkflowOutputsList === 'function') renderWorkflowOutputsList();
+    } catch (e) {
+        console.error('renderSelectedElementPanel', e);
+    }
+}
+
+function renderWorkflowInputsList() {
+    const container = document.getElementById('workflow-inputs-list');
+    if (!container) return;
+    container.innerHTML = '';
+    workflowInputsList.forEach(function(item, index) {
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center gap-2 mb-2';
+        row.innerHTML = '<input type="text" class="form-control form-control-sm workflow-input-name" placeholder="Name" value="' + escapeHtml(item.name) + '" data-index="' + index + '">' +
+            '<select class="form-control form-control-sm workflow-input-type" data-index="' + index + '">' +
+            INPUT_OUTPUT_TYPES.map(function(t) { return '<option value="' + t + '"' + (item.type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+            '</select>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm workflow-remove-input" data-index="' + index + '" title="Remove">×</button>';
+        container.appendChild(row);
+    });
+}
+
+function renderWorkflowOutputsList() {
+    const container = document.getElementById('workflow-outputs-list');
+    if (!container) return;
+    container.innerHTML = '';
+    workflowOutputsList.forEach(function(item, index) {
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center gap-2 mb-2';
+        row.innerHTML = '<input type="text" class="form-control form-control-sm workflow-output-name" placeholder="Name" value="' + escapeHtml(item.name) + '" data-index="' + index + '">' +
+            '<select class="form-control form-control-sm workflow-output-type" data-index="' + index + '">' +
+            INPUT_OUTPUT_TYPES.map(function(t) { return '<option value="' + t + '"' + (item.type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+            '</select>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm workflow-remove-output" data-index="' + index + '" title="Remove">×</button>';
+        container.appendChild(row);
+    });
+}
+
+function syncWorkflowInputsFromDom() {
+    document.querySelectorAll('.workflow-input-name').forEach(function(inp) {
+        var i = parseInt(inp.getAttribute('data-index'), 10);
+        if (!isNaN(i) && workflowInputsList[i]) workflowInputsList[i].name = inp.value.trim();
+    });
+    document.querySelectorAll('.workflow-input-type').forEach(function(sel) {
+        var i = parseInt(sel.getAttribute('data-index'), 10);
+        if (!isNaN(i) && workflowInputsList[i]) workflowInputsList[i].type = sel.value;
+    });
+}
+
+function syncWorkflowOutputsFromDom() {
+    document.querySelectorAll('.workflow-output-name').forEach(function(inp) {
+        var i = parseInt(inp.getAttribute('data-index'), 10);
+        if (!isNaN(i) && workflowOutputsList[i]) workflowOutputsList[i].name = inp.value.trim();
+    });
+    document.querySelectorAll('.workflow-output-type').forEach(function(sel) {
+        var i = parseInt(sel.getAttribute('data-index'), 10);
+        if (!isNaN(i) && workflowOutputsList[i]) workflowOutputsList[i].type = sel.value;
+    });
+}
+
+function updateBindingDraftFromForm() {
+    if (!selectedElement || selectedElement.type !== 'serviceTask') {
+        return;
+    }
+    var handlerEl = document.getElementById('selected-element-handler');
+    var descEl = document.getElementById('selected-element-description');
+    var inputsEl = document.getElementById('selected-element-inputs');
+    var outputsEl = document.getElementById('selected-element-outputs');
+    var timeoutEl = document.getElementById('selected-element-timeout');
+    var retriesEl = document.getElementById('selected-element-retries');
+    if (!handlerEl || !inputsEl || !outputsEl) return;
+    bindingsState.workflow_id = bindingsState.workflow_id || workflowId;
+    const handler = (handlerEl.value || '').trim();
+    const description = (descEl ? descEl.value || '' : '').trim();
+    const inputs = parseCommaList(inputsEl.value);
+    const outputs = parseCommaList(outputsEl.value);
+    const timeoutRaw = timeoutEl && (timeoutEl.value || '').trim();
+    const retriesRaw = retriesEl && (retriesEl.value || '').trim();
+    const timeoutSeconds = timeoutRaw === '' ? undefined : (parseInt(timeoutRaw, 10));
+    const retries = retriesRaw === '' ? undefined : (parseInt(retriesRaw, 10));
+
+    if (!handler && !description && !inputs.length && !outputs.length && timeoutSeconds === undefined && retries === undefined) {
+        delete bindingsState.serviceTasks[selectedElement.id];
+    } else {
+        bindingsState.serviceTasks[selectedElement.id] = {
+            handler: handler,
+            description: description
+        };
+        if (inputs.length) {
+            bindingsState.serviceTasks[selectedElement.id].inputs = inputs;
+        }
+        if (outputs.length) {
+            bindingsState.serviceTasks[selectedElement.id].outputs = outputs;
+        }
+        if (timeoutSeconds !== undefined && !isNaN(timeoutSeconds) && timeoutSeconds >= 0) {
+            bindingsState.serviceTasks[selectedElement.id].timeout_seconds = timeoutSeconds;
+        }
+        if (retries !== undefined && !isNaN(retries) && retries >= 0) {
+            bindingsState.serviceTasks[selectedElement.id].retries = retries;
+        }
+    }
+    renderSelectedElementPanel();
+}
+
+function appendCopilotMessage(role, content) {
+    const container = document.getElementById('copilot-messages');
+    if (!container) {
+        return;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'copilot-message ' + role;
+    const roleEl = document.createElement('div');
+    roleEl.className = 'copilot-message-role';
+    roleEl.textContent = role === 'assistant' ? 'BPMN Expert' : 'You';
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'copilot-message-body';
+    if (role === 'assistant' && typeof marked !== 'undefined') {
+        if (typeof hljs !== 'undefined') {
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        try {
+                            return hljs.highlight(code, { language: lang }).value;
+                        } catch (err) {}
+                    }
+                    return hljs.highlightAuto(code).value;
+                }
+            });
+        }
+        bodyEl.innerHTML = marked.parse(content || '');
+    } else {
+        bodyEl.innerHTML = escapeHtml(content || '').replace(/\n/g, '<br>');
+    }
+    wrapper.appendChild(roleEl);
+    wrapper.appendChild(bodyEl);
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
+}
+
+function showSaveDialog() {
+    console.log('[WorkflowSave] showSaveDialog() called');
+    var dialog = document.getElementById('version-dialog');
+    if (!dialog) {
+        console.error('[WorkflowSave] version-dialog element not found');
+        return;
+    }
+    if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+        console.log('[WorkflowSave] dialog opened via showModal()');
+    } else {
+        dialog.setAttribute('open', '');
+        dialog.style.display = 'block';
+        console.log('[WorkflowSave] dialog opened via open attribute (fallback)');
+    }
+}
+
+function hideSaveDialog() {
+    console.log('[WorkflowSave] hideSaveDialog() called');
+    var dialog = document.getElementById('version-dialog');
+    if (dialog) {
+        dialog.close();
+    }
+}
+
+function getBpmnXmlFromFrame() {
+    return new Promise(function(resolve, reject) {
+        var frame = document.getElementById('bpmn-editor-frame');
+        if (!frame || !frame.contentWindow) {
+            resolve(document.getElementById('bpmn-xml-code').value || '');
+            return;
+        }
+        var handler = function(event) {
+            if (event.data && event.data.type === 'xml') {
+                window.removeEventListener('message', handler);
+                resolve(event.data.xml || '');
+            } else if (event.data && event.data.type === 'xmlError') {
+                window.removeEventListener('message', handler);
+                reject(new Error(event.data.error || 'Failed to get diagram XML'));
+            }
+        };
+        window.addEventListener('message', handler);
+        frame.contentWindow.postMessage({ type: 'getXML' }, window.location.origin);
+        setTimeout(function() {
+            window.removeEventListener('message', handler);
+            resolve(document.getElementById('bpmn-xml-code').value || '');
+        }, 8000);
+    });
+}
+
+async function saveWorkflow() {
+    console.log('[WorkflowSave] saveWorkflow() called');
+    const comment = document.getElementById('version-comment').value;
+    const tag = document.getElementById('version-tag').value;
+    console.log('[WorkflowSave] comment length:', (comment || '').length, 'tag:', tag || '(empty)');
+    if (!comment.trim()) {
+        console.warn('[WorkflowSave] validation failed: empty comment');
+        alert('Please provide a description of your changes');
+        return;
+    }
+    console.log('[WorkflowSave] getting BPMN XML from iframe...');
+    var bpmnXml;
+    try {
+        bpmnXml = await getBpmnXmlFromFrame();
+        console.log('[WorkflowSave] BPMN XML length:', (bpmnXml || '').length);
+        document.getElementById('bpmn-xml-code').value = bpmnXml || '';
+    } catch (e) {
+        console.error('[WorkflowSave] BPMN XML from iframe:', e);
+        bpmnXml = document.getElementById('bpmn-xml-code').value || '';
+    }
+    updateBindingDraftFromForm();
+    syncWorkflowInputsFromDom();
+    syncWorkflowOutputsFromDom();
+    const inputSchema = {};
+    workflowInputsList.forEach(function(item) {
+        if ((item.name || '').trim()) inputSchema[item.name.trim()] = { type: item.type || 'string', label: item.name.trim() };
+    });
+    const outputsList = workflowOutputsList.filter(function(o) { return (o.name || '').trim(); }).map(function(o) { return { name: o.name.trim(), type: o.type || 'string' }; });
+    const formData = {
+        metadata: {
+            name: document.getElementById('name').value,
+            description: document.getElementById('description').value,
+            icon: '{{ workflow.icon|escapejs }}',
+            category: document.getElementById('category').value,
+            estimated_duration: document.getElementById('estimated_duration').value,
+            input_schema: inputSchema,
+            outputs: outputsList
+        },
+        files: {
+            'workflow.bpmn': bpmnXml || document.getElementById('bpmn-xml-code').value
+        },
+        bindings_json: bindingsState,
+        version: {
+            comment: comment,
+            tag: tag || null
+        }
+    };
+    var saveUrl = '/api/workflows/{{ workflow.id }}/save/';
+    var csrf = getCsrfToken();
+    console.log('[WorkflowSave] POST', saveUrl, 'CSRF present:', !!csrf);
+    try {
+        const response = await fetch(saveUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf
+            },
+            body: JSON.stringify(formData)
+        });
+        console.log('[WorkflowSave] response status:', response.status, response.statusText);
+        const result = await response.json();
+        console.log('[WorkflowSave] result:', result);
+        if (result.success) {
+            if (result.validation) {
+                bindingsValidation = result.validation;
+                renderRuntimeFromBindings();
+                renderBindingsValidation();
+            }
+            alert(`Version ${result.version_number} saved successfully!`);
+            hideSaveDialog();
+            window.location.reload();
+        } else {
+            alert(`Error: ${result.error || 'Failed to save workflow'}`);
+        }
+    } catch (error) {
+        console.error('[WorkflowSave] fetch/parse error:', error);
+        alert('Failed to save workflow. Please try again.');
+    }
+}
+
+async function sendCopilotPrompt(promptText) {
+    const prompt = (promptText || '').trim();
+    if (!prompt) {
+        return;
+    }
+    appendCopilotMessage('user', prompt);
+    const sendBtn = document.getElementById('copilot-send-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+    }
+    updateBindingDraftFromForm();
+
+    let bpmnXml = '';
+    try {
+        bpmnXml = await getBpmnXmlFromFrame();
+    } catch (error) {
+        console.warn('[BpmnExpert] failed to get current BPMN XML from iframe', error);
+    }
+
+    const contextData = {
+        source: 'workflow_editor',
+        workflow_id: workflowId,
+        selected_element_id: selectedElement ? selectedElement.id : '',
+        selected_element_name: selectedElement ? selectedElement.name : '',
+        selected_element_type: selectedElement ? selectedElement.type : '',
+        bindings_json: bindingsState,
+        bpmn_xml: bpmnXml || document.getElementById('bpmn-xml-code').value || ''
+    };
+
+    try {
+        const response = await fetch('/api/chat/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                prompt: prompt,
+                session_id: copilotSessionId,
+                agent: 'bpmn_expert',
+                context_data: contextData
+            })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'BPMN Expert request failed');
+        }
+        copilotSessionId = result.session_id || copilotSessionId;
+        appendCopilotMessage('assistant', result.response || 'No response returned.');
+        // Reload diagram from server so any BPMN changes applied by the agent are visible
+        reloadDiagramFromServer();
+    } catch (error) {
+        appendCopilotMessage('assistant', 'Error: ' + error.message);
+    } finally {
+        if (sendBtn) {
+            sendBtn.disabled = false;
+        }
+    }
+}
+
+function reloadDiagramFromServer() {
+    var frame = document.getElementById('bpmn-editor-frame');
+    if (!frame || !frame.src) return;
+    var sep = frame.src.indexOf('?') >= 0 ? '&' : '?';
+    frame.src = frame.src + sep + 't=' + Date.now();
+}
+
+function attachCopilotHandlers() {
+    renderRuntimeFromBindings();
+    renderSelectedElementPanel();
+    renderBindingsValidation();
+    appendCopilotMessage(
+        'assistant',
+        'BPMN Expert is ready. Select a task, ask a question, or request a proposal for bindings or handler code.'
+    );
+
+    const bindingBtn = document.getElementById('update-selected-binding-btn');
+    if (bindingBtn) {
+        bindingBtn.addEventListener('click', function() {
+            updateBindingDraftFromForm();
+            renderSelectedElementPanel();
+        });
+    }
+
+    const addInputBtn = document.getElementById('workflow-add-input-btn');
+    if (addInputBtn) {
+        addInputBtn.addEventListener('click', function() {
+            workflowInputsList.push({ name: '', type: 'string' });
+            renderWorkflowInputsList();
+        });
+    }
+    const addOutputBtn = document.getElementById('workflow-add-output-btn');
+    if (addOutputBtn) {
+        addOutputBtn.addEventListener('click', function() {
+            workflowOutputsList.push({ name: '', type: 'string' });
+            renderWorkflowOutputsList();
+        });
+    }
+    const inputsListEl = document.getElementById('workflow-inputs-list');
+    if (inputsListEl) {
+        inputsListEl.addEventListener('click', function(e) {
+            if (e.target.classList.contains('workflow-remove-input')) {
+                var i = parseInt(e.target.getAttribute('data-index'), 10);
+                if (!isNaN(i) && i >= 0 && i < workflowInputsList.length) {
+                    workflowInputsList.splice(i, 1);
+                    renderWorkflowInputsList();
+                }
+            }
+        });
+        inputsListEl.addEventListener('change', syncWorkflowInputsFromDom);
+        inputsListEl.addEventListener('input', syncWorkflowInputsFromDom);
+    }
+    const outputsListEl = document.getElementById('workflow-outputs-list');
+    if (outputsListEl) {
+        outputsListEl.addEventListener('click', function(e) {
+            if (e.target.classList.contains('workflow-remove-output')) {
+                var i = parseInt(e.target.getAttribute('data-index'), 10);
+                if (!isNaN(i) && i >= 0 && i < workflowOutputsList.length) {
+                    workflowOutputsList.splice(i, 1);
+                    renderWorkflowOutputsList();
+                }
+            }
+        });
+        outputsListEl.addEventListener('change', syncWorkflowOutputsFromDom);
+        outputsListEl.addEventListener('input', syncWorkflowOutputsFromDom);
+    }
+
+    ['selected-element-handler', 'selected-element-description', 'selected-element-inputs', 'selected-element-outputs']
+        .forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', updateBindingDraftFromForm);
+            }
+        });
+
+    const copilotForm = document.getElementById('copilot-form');
+    const copilotInput = document.getElementById('copilot-prompt-input');
+    if (copilotForm && copilotInput) {
+        copilotForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const prompt = copilotInput.value;
+            copilotInput.value = '';
+            sendCopilotPrompt(prompt);
+        });
+    }
+
+    document.querySelectorAll('[data-copilot-prompt]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            sendCopilotPrompt(button.getAttribute('data-copilot-prompt') || '');
+        });
+    });
+
+    window.addEventListener('message', function(event) {
+        if (!event.data || typeof event.data !== 'object') return;
+        var frame = document.getElementById('bpmn-editor-frame');
+        var fromOurFrame = frame && frame.contentWindow && event.source === frame.contentWindow;
+        var originOk = event.origin === window.location.origin;
+        if (!originOk && event.origin) {
+            try {
+                var a = new URL(event.origin);
+                var b = new URL(window.location.origin);
+                originOk = a.hostname === b.hostname && a.port === b.port && a.protocol === b.protocol;
+            } catch (err) { originOk = false; }
+        }
+        if (!fromOurFrame && !originOk) return;
+
+        if (event.data.type === 'bpmnSelectionChanged') {
+            updateBindingDraftFromForm();
+            selectedElement = event.data.element || null;
+            var el = selectedElement;
+            var idEl = document.getElementById('selected-element-id');
+            var nameEl = document.getElementById('selected-element-name');
+            var typeEl = document.getElementById('selected-element-type');
+            if (idEl) idEl.value = el ? (el.id || '') : '';
+            if (nameEl) nameEl.value = el ? (el.name || '') : '';
+            if (typeEl) typeEl.value = el ? (el.type || '') : '';
+            renderSelectedElementPanel();
+        } else if (event.data.type === 'bpmnDiagramChanged') {
+            if (event.data.xml) {
+                var codeEl = document.getElementById('bpmn-xml-code');
+                if (codeEl) codeEl.value = event.data.xml;
+            }
+        }
+    });
+}
+
+function attachSaveVersionHandlers() {
+    console.log('[WorkflowSave] attachSaveVersionHandlers() running, readyState:', document.readyState);
+    var openBtn = document.getElementById('save-version-open-btn');
+    var cancelBtn = document.getElementById('version-dialog-cancel');
+    var saveBtn = document.getElementById('version-dialog-save');
+    console.log('[WorkflowSave] openBtn:', !!openBtn, 'cancelBtn:', !!cancelBtn, 'saveBtn:', !!saveBtn);
+    if (openBtn && !openBtn._saveHandlersAttached) {
+        openBtn._saveHandlersAttached = true;
+        openBtn.addEventListener('click', function(e) {
+            console.log('[WorkflowSave] Save & Version button clicked');
+            e.preventDefault();
+            showSaveDialog();
+        });
+        console.log('[WorkflowSave] handler attached to Save & Version button');
+    }
+    if (cancelBtn && !cancelBtn._saveHandlersAttached) {
+        cancelBtn._saveHandlersAttached = true;
+        cancelBtn.addEventListener('click', hideSaveDialog);
+    }
+    if (saveBtn && !saveBtn._saveHandlersAttached) {
+        saveBtn._saveHandlersAttached = true;
+        saveBtn.addEventListener('click', function(e) {
+            console.log('[WorkflowSave] Save Version (dialog) button clicked');
+            e.preventDefault();
+            saveWorkflow();
+        });
+        console.log('[WorkflowSave] handler attached to dialog Save Version button');
+    }
+    initCollapsibleSidebarCards();
+    initDiagramSidebarResizer();
+    attachCopilotHandlers();
+}
+
+function initDiagramSidebarResizer() {
+    var sidebar = document.getElementById('diagram-sidebar');
+    var resizer = document.getElementById('diagram-sidebar-resizer');
+    var layout = document.getElementById('diagram-layout');
+    if (!sidebar || !resizer || !layout) return;
+
+    var storageKey = 'workflow-edit-sidebar-width';
+    var minW = 280;
+    var maxW = 720;
+    var defaultW = 420;
+
+    function getStoredWidth() {
+        try {
+            var w = parseInt(sessionStorage.getItem(storageKey), 10);
+            return (w >= minW && w <= maxW) ? w : defaultW;
+        } catch (e) {
+            return defaultW;
+        }
+    }
+    function setStoredWidth(w) {
+        try {
+            sessionStorage.setItem(storageKey, String(w));
+        } catch (e) {}
+    }
+
+    var saved = getStoredWidth();
+    sidebar.style.width = saved + 'px';
+
+    resizer.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var startX = e.clientX;
+        var startWidth = sidebar.offsetWidth;
+        resizer.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        function onMove(e) {
+            var delta = startX - e.clientX;
+            var newW = Math.min(maxW, Math.max(minW, startWidth + delta));
+            sidebar.style.width = newW + 'px';
+            setStoredWidth(newW);
+        }
+        function onUp() {
+            resizer.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
+function initCollapsibleSidebarCards() {
+    var storageKey = 'workflow-edit-sidebar-' + (workflowId || 'default');
+    function getStoredState() {
+        try {
+            var raw = sessionStorage.getItem(storageKey);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+    function setStoredState(state) {
+        try {
+            sessionStorage.setItem(storageKey, JSON.stringify(state));
+        } catch (e) {}
+    }
+
+    document.querySelectorAll('.sidebar-card.collapsible').forEach(function(card) {
+        var header = card.querySelector('.sidebar-card-header');
+        var body = card.querySelector('.sidebar-card-body');
+        var key = card.getAttribute('data-collapsible-key') || card.id || '';
+        if (!header || !body) return;
+
+        var state = getStoredState();
+        var isCollapsed = state[key];
+        if (isCollapsed) {
+            card.classList.add('collapsed');
+            header.setAttribute('aria-expanded', 'false');
+        }
+
+        header.addEventListener('click', function() {
+            var collapsed = card.classList.toggle('collapsed');
+            header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            state = getStoredState();
+            state[key] = collapsed;
+            setStoredState(state);
+        });
+    });
+}
+
+console.log('[WorkflowSave] script loaded');
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachSaveVersionHandlers);
+} else {
+    attachSaveVersionHandlers();
+}
+
+</script>
+{% endblock %}

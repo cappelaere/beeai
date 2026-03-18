@@ -1,0 +1,36 @@
+# ----------------------------------------
+# Landing page
+# Account: Government-Wide Account
+# Property: GSA Agency
+# ----------------------------------------
+# 
+# All Users
+# Start date: 20260201
+# End date: 20260207
+Landing page,Sessions,Active users,New users,Average engagement time per session,Key events,Session key event rate
+/,8592,8151,7445,98.7832867783985,2821.362154743565,0.1784217877094972
+/asset-details,904,683,440,50.29756637168141,393.88329814216587,0.23672566371681417
+/our-listing,828,589,273,38.957729468599034,132.13337477612592,0.0821256038647343
+(not set),461,289,0,29.290672451193057,15.100957117271534,0.02386117136659436
+/login,244,233,220,16.438524590163933,13.842544024165573,0.02459016393442623
+/gsaauctions/gsaauctions,89,77,63,67.78651685393258,18.876196396589418,0.12359550561797752
+/our-listing-map,72,45,18,11.402777777777779,3.7752392793178835,0.013888888888888888
+/gsaauctions/aucpbsindx,55,52,45,98.56363636363636,8.808891651741728,0.10909090909090909
+/gsaauctions/aucdsclnk,48,40,39,21.5625,2.5168261862119223,0.020833333333333332
+/maintenance,45,36,30,20.6,3.7752392793178835,0.08888888888888889
+/faq,15,3,3,0,0,0
+/gsaauctions/aucitsrh,11,11,10,100,0,0
+/subscribers,10,9,4,105.7,6.292065465529806,0.6
+/buyers,8,6,5,21.875,1.2584130931059612,0.125
+/contact-us,6,6,5,1.3333333333333333,0,0
+/gsaauctions/aucitdsc,5,5,3,39.2,0,0
+/terms,4,1,0,0,0,0
+/gsaauctions/aucbystate,3,3,3,0,0,0
+/maintenance/favicon.ico,3,3,3,0,0,0
+/timeouterror.htm,3,3,3,0,0,0
+/admin/users,1,1,0,0,0,0
+/e5e732e89db25b9082,1,1,0,16,0,0
+/edit-profile,1,1,0,0,0,0
+/favourite-listings,1,0,0,0,0,0
+/gsaauctions/aucalsrh,1,1,1,0,0,0
+/property/ri-0344-aa,1,1,1,0,0,0

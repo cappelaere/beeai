@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  id="Definitions_RIT" targetNamespace="http://example.com/rit">
+  <bpmn:process id="Process_RIT" isExecutable="true">
+    <bpmn:startEvent id="start_rit" name="Start">
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="start_rit" targetRef="task_a" />
+    <bpmn:serviceTask id="task_a" name="Task A">
+      <bpmn:incoming>f0</bpmn:incoming>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f1" sourceRef="task_a" targetRef="task_b" />
+    <bpmn:serviceTask id="task_b" name="Task B">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f2" sourceRef="task_b" targetRef="end_rit" />
+    <bpmn:endEvent id="end_rit" name="End">
+      <bpmn:incoming>f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Compare Versions: {{ workflow.name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}?v=2.2">
+<style>
+.version-compare-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+    color: #1a1a1a;
+}
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.breadcrumb a {
+    color: #2196f3;
+    text-decoration: none;
+}
+
+.compare-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.version-box {
+    text-align: center;
+    flex: 1;
+    max-width: 300px;
+}
+
+.version-box h3 {
+    margin: 0 0 0.5rem 0;
+    color: #1a1a1a;
+}
+
+.version-box .meta {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.version-box .tag {
+    display: inline-block;
+    background: #2196f3;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+.arrow {
+    font-size: 2rem;
+    color: #999;
+}
+
+.diff-viewer {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.file-diff {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.file-diff-header {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.file-diff-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.file-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.diff-content {
+    padding: 0;
+    overflow-x: auto;
+}
+
+.diff-content pre {
+    margin: 0;
+    padding: 1rem;
+    background: #f8f9fa;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.diff-line {
+    display: block;
+    padding: 0.1rem 0.5rem;
+}
+
+.diff-line-added {
+    background: #e6ffed;
+    color: #22863a;
+}
+
+.diff-line-removed {
+    background: #ffeef0;
+    color: #b31d28;
+}
+
+.diff-line-context {
+    background: white;
+    color: #333;
+}
+
+.diff-line-info {
+    background: #f1f8ff;
+    color: #005cc5;
+    font-weight: 600;
+}
+
+.no-changes {
+    text-align: center;
+    padding: 3rem;
+    color: #666;
+}
+
+.no-changes svg {
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    background: #e8e8e8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="version-compare-container">
+    <div class="page-header">
+        <div class="breadcrumb">
+            <a href="{% url 'workflows_list' %}">Workflows</a>
+            <span>/</span>
+            <a href="{% url 'workflow_detail' workflow.id %}">{{ workflow.name }}</a>
+            <span>/</span>
+            <a href="{% url 'workflow_versions' workflow.id %}">Versions</a>
+            <span>/</span>
+            <span>Compare</span>
+        </div>
+        <h1>{{ workflow.icon }} Compare Versions</h1>
+    </div>
+    
+    <div class="compare-header">
+        <div class="version-box">
+            <h3>Version {{ version1.version_number }}</h3>
+            {% if version1.version_tag %}
+            <span class="tag">{{ version1.version_tag }}</span>
+            {% endif %}
+            <div class="meta">{{ version1.created_at|date:"Y-m-d H:i:s" }}</div>
+            <div class="meta">by User {{ version1.created_by_user_id }}</div>
+        </div>
+        
+        <div class="arrow">↔</div>
+        
+        <div class="version-box">
+            <h3>Version {{ version2.version_number }}</h3>
+            {% if version2.version_tag %}
+            <span class="tag">{{ version2.version_tag }}</span>
+            {% endif %}
+            <div class="meta">{{ version2.created_at|date:"Y-m-d H:i:s" }}</div>
+            <div class="meta">by User {{ version2.created_by_user_id }}</div>
+        </div>
+    </div>
+    
+    {% if diffs %}
+    <div class="diff-viewer">
+        {% for file_diff in diffs %}
+        <div class="file-diff">
+            <div class="file-diff-header">
+                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                    <polyline points="13 2 13 9 20 9"/>
+                </svg>
+                <h3>{{ file_diff.filename }}</h3>
+            </div>
+            <div class="diff-content">
+                <pre>{{ file_diff.unified_diff }}</pre>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-changes">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <h2>No Differences Found</h2>
+        <p>These two versions have identical file contents.</p>
+    </div>
+    {% endif %}
+    
+    <div style="margin-top: 2rem;">
+        <a href="{% url 'workflow_versions' workflow.id %}" class="back-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Back to Version History
+        </a>
+    </div>
+</div>
+{% endblock %}

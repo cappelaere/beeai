@@ -1,0 +1,10 @@
+workflow_id: runner_integration_test
+executor: workflows.runner_integration_test.workflow.RunnerIntegrationTestWorkflow
+
+serviceTasks:
+  task_a:
+    handler: task_a
+    description: "Pause for human task"
+  task_b:
+    handler: task_b
+    description: "Second step"

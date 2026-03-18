@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ diagram_name }} - RealtyIQ Agent{% endblock %}
+{% block content %}
+
+<div class="content-header">
+  <h2>📊 {{ diagram_name }}</h2>
+  <p class="text-muted">System Architecture Diagram</p>
+  <p class="text-muted" style="font-size: 0.875rem;">Source: /diagrams/{{ diagram_name }}.drawio</p>
+</div>
+
+<div class="diagram-container">
+  <div class="diagram-viewer" id="diagram-viewer"></div>
+</div>
+
+<style>
+.diagram-container {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  min-height: 600px;
+  max-width: 1400px;
+}
+
+.diagram-viewer {
+  width: 100%;
+  height: 700px;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: white;
+  overflow: hidden;
+}
+
+.theme-dark .diagram-container {
+  background: var(--white);
+  border-color: var(--border);
+}
+</style>
+
+<script src="https://viewer.diagrams.net/js/viewer-static.min.js"></script>
+<script>
+(function() {
+  // Embed the diagram XML directly
+  const diagramXml = {{ diagram_content|safe }};
+  
+  // Initialize the viewer
+  const container = document.getElementById('diagram-viewer');
+  
+  // Create iframe for viewer
+  const iframe = document.createElement('iframe');
+  iframe.style.width = '100%';
+  iframe.style.height = '100%';
+  iframe.style.border = 'none';
+  iframe.frameBorder = '0';
+  
+  // Use the diagrams.net viewer URL with the XML data
+  const encodedXml = encodeURIComponent(diagramXml);
+  iframe.src = `https://viewer.diagrams.net/?embed=1&chrome=0&nav=1&lightbox=0&toolbar=0&edit=_blank#R${encodedXml}`;
+  
+  container.appendChild(iframe);
+})();
+</script>
+
+{% endblock %}

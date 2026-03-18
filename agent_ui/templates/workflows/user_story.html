@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}">
+<style>
+    /* User Story-specific styles */
+    .doc-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    .doc-header {
+        border-bottom: 3px solid #ff9800;
+        padding-bottom: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .doc-title-row {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .workflow-number-badge {
+        background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+        color: white;
+        font-size: 2rem;
+        font-weight: 700;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+        min-width: 100px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    
+    .doc-header h1 {
+        margin: 0;
+        color: #1a1a1a;
+        font-size: 2.5rem;
+    }
+    
+    .workflow-icon {
+        font-size: 3rem;
+        margin-right: 1rem;
+        vertical-align: middle;
+    }
+    
+    .doc-meta {
+        display: flex;
+        gap: 2rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .doc-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #666;
+        font-size: 0.95rem;
+    }
+    
+    .doc-meta-item i {
+        color: #ff9800;
+    }
+    
+    .doc-actions {
+        margin-top: 1.5rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .doc-actions .btn-back,
+    button.btn-back {
+        background: #fff3e0 !important;
+        color: #e65100 !important;
+        padding: 0.75rem 1.5rem;
+        border-radius: 4px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+        border: 1px solid #ffe0b2 !important;
+        cursor: pointer;
+        font-size: 1rem;
+        font-family: inherit;
+    }
+    
+    .doc-actions .btn-back:hover,
+    button.btn-back:hover {
+        background: #ffe0b2 !important;
+        border-color: #ffcc80 !important;
+        color: #bf360c !important;
+    }
+    
+    /* Markdown content styling */
+    .doc-content {
+        line-height: 1.8;
+        color: #333;
+    }
+    
+    /* Section 508 Compliant Heading Styles */
+    /* All colors meet WCAG AA contrast requirements (4.5:1 minimum) */
+    
+    .doc-content .doc-section-title,
+    .doc-content h1.doc-section-title {
+        font-size: 2.8rem !important;
+        font-weight: 800 !important;
+        line-height: 1.2 !important;
+        margin: 2.5rem 0 1.5rem 0 !important;
+        color: #0d47a1 !important; /* High contrast blue - 9.85:1 ratio */
+        border-bottom: 4px solid #1976d2 !important;
+        padding-bottom: 0.75rem !important;
+        letter-spacing: -0.02em !important;
+    }
+    
+    .doc-content .doc-section-heading,
+    .doc-content h2.doc-section-heading {
+        font-size: 2.2rem !important;
+        font-weight: 800 !important;
+        line-height: 1.3 !important;
+        margin: 2rem 0 1.25rem 0 !important;
+        color: #01579b !important; /* High contrast dark blue - 10.45:1 ratio */
+        letter-spacing: -0.01em !important;
+    }
+    
+    .doc-content .doc-subsection-heading,
+    .doc-content h3.doc-subsection-heading {
+        font-size: 1.5rem !important;
+        font-weight: 700 !important;
+        line-height: 1.4 !important;
+        margin: 1.75rem 0 1rem 0 !important;
+        color: #263238 !important; /* Dark gray - 13.64:1 ratio */
+    }
+    
+    .doc-content .doc-minor-heading,
+    .doc-content h4.doc-minor-heading {
+        font-size: 1.2rem !important;
+        font-weight: 700 !important;
+        line-height: 1.5 !important;
+        margin: 1.5rem 0 0.75rem 0 !important;
+        color: #37474f !important; /* Medium dark gray - 10.39:1 ratio */
+    }
+    
+    /* Focus styles for keyboard navigation (508 requirement) */
+    .doc-content .doc-section-title:focus,
+    .doc-content .doc-section-heading:focus,
+    .doc-content .doc-subsection-heading:focus,
+    .doc-content .doc-minor-heading:focus {
+        outline: 3px solid #ff9800 !important;
+        outline-offset: 2px !important;
+    }
+    
+    .doc-content p {
+        margin: 1rem 0;
+    }
+    
+    .doc-content ul, .doc-content ol {
+        margin: 1rem 0;
+        padding-left: 2rem;
+    }
+    
+    .doc-content li {
+        margin: 0.5rem 0;
+    }
+    
+    .doc-content code {
+        background: #fff3e0;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: 0.9em;
+        color: #e65100;
+    }
+    
+    .doc-content pre {
+        background: #fff8e1;
+        border: 1px solid #ffe0b2;
+        border-radius: 4px;
+        padding: 1.5rem;
+        overflow-x: auto;
+        margin: 1.5rem 0;
+    }
+    
+    .doc-content pre code {
+        background: none;
+        padding: 0;
+        color: inherit;
+        font-size: 0.9rem;
+    }
+    
+    .doc-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.5rem 0;
+        background: white;
+        border: 1px solid #e0e0e0;
+    }
+    
+    .doc-content th, .doc-content td {
+        padding: 0.75rem;
+        text-align: left;
+        border: 1px solid #e0e0e0;
+    }
+    
+    .doc-content th {
+        background: #fff3e0;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .doc-content tr:hover {
+        background: #fffbf5;
+    }
+    
+    .doc-content blockquote {
+        border-left: 4px solid #ff9800;
+        padding: 1rem 1.5rem;
+        margin: 1.5rem 0;
+        background: #fff8e1;
+        color: #555;
+    }
+    
+    .doc-content img {
+        max-width: 100%;
+        height: auto;
+        margin: 1.5rem 0;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .doc-content hr {
+        border: none;
+        border-top: 2px solid #e0e0e0;
+        margin: 2rem 0;
+    }
+    
+    .doc-content a {
+        color: #ff9800;
+        text-decoration: none;
+        border-bottom: 1px dotted #ff9800;
+    }
+    
+    .doc-content a:hover {
+        color: #f57c00;
+        border-bottom-style: solid;
+    }
+    
+    /* Checkmark styling for acceptance criteria */
+    .doc-content ul li:has(> input[type="checkbox"]) {
+        list-style: none;
+        margin-left: -1.5rem;
+    }
+    
+    /* Responsive - maintains 508 compliance on mobile */
+    @media (max-width: 768px) {
+        .doc-container {
+            padding: 1rem;
+        }
+        
+        .doc-header h1 {
+            font-size: 1.8rem;
+        }
+        
+        .workflow-icon {
+            font-size: 2rem;
+        }
+        
+        .doc-meta {
+            gap: 1rem;
+        }
+        
+        .doc-section-title {
+            font-size: 2rem;
+            margin: 2rem 0 1rem 0;
+        }
+        
+        .doc-section-heading {
+            font-size: 1.6rem;
+            margin: 1.5rem 0 1rem 0;
+        }
+        
+        .doc-subsection-heading {
+            font-size: 1.3rem;
+            margin: 1.25rem 0 0.75rem 0;
+        }
+        
+        .doc-minor-heading {
+            font-size: 1.1rem;
+            margin: 1rem 0 0.5rem 0;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="doc-container">
+    <header class="doc-header" role="banner">
+        <div class="doc-title-row">
+            <div class="workflow-number-badge" aria-label="Workflow number {{ workflow.workflow_number }}">#{{ workflow.workflow_number }}</div>
+            <h1>
+                <span class="workflow-icon" aria-hidden="true">{{ workflow.icon }}</span>
+                {{ workflow.name }} - User Story
+            </h1>
+        </div>
+        
+        <div class="doc-meta" role="contentinfo" aria-label="Workflow metadata">
+            <div class="doc-meta-item">
+                <i class="fas fa-folder" aria-hidden="true"></i>
+                <span>Category: <strong>{{ workflow.category }}</strong></span>
+            </div>
+            <div class="doc-meta-item">
+                <i class="fas fa-clock" aria-hidden="true"></i>
+                <span>Duration: <strong>{{ workflow.estimated_duration }}</strong></span>
+            </div>
+            <div class="doc-meta-item">
+                <i class="fas fa-code" aria-hidden="true"></i>
+                <span>Name: <code>{{ workflow.id }}</code></span>
+            </div>
+        </div>
+        
+        <nav class="doc-actions" role="navigation" aria-label="Primary workflow actions">
+            <button onclick="window.location.href='{% url 'workflow_detail' workflow.id %}'" class="btn-back">
+                <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                Back to Workflow
+            </button>
+            {% if can_generate_draft %}
+            <button type="button" id="generate-draft-btn" class="btn btn-primary">
+                <i class="fas fa-magic" aria-hidden="true"></i>
+                Generate draft
+            </button>
+            {% endif %}
+        </nav>
+    </header>
+    
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 2rem 0;">
+    
+    <div id="main-content" class="doc-content" role="main" aria-label="Workflow user story content">
+        {{ content|safe }}
+    </div>
+    
+    <nav class="doc-actions" style="margin-top: 3rem; padding-top: 2rem; border-top: 2px solid #e0e0e0;" role="navigation" aria-label="Workflow navigation">
+        <button onclick="window.location.href='{% url 'workflow_detail' workflow.id %}'" class="btn-back">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i>
+            Back to Workflow
+        </button>
+        <button onclick="window.location.href='{% url 'workflows_list' %}'" class="btn-back">
+            <i class="fas fa-list" aria-hidden="true"></i>
+            All Workflows
+        </button>
+    </nav>
+</div>
+
+{% if can_generate_draft %}
+<script>
+document.getElementById('generate-draft-btn').addEventListener('click', function() {
+    var btn = this;
+    var origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Generating…';
+    fetch('{% url "workflow_generate_user_story" workflow.id %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: '{}'
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(o) {
+        if (o.ok && o.data.success) window.location.reload();
+        else { btn.disabled = false; btn.innerHTML = origHtml; alert(o.data.error || 'Failed to generate draft'); }
+    })
+    .catch(function() { btn.disabled = false; btn.innerHTML = origHtml; alert('Request failed'); });
+});
+</script>
+{% endif %}
+{% endblock %}

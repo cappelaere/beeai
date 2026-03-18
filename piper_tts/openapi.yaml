@@ -1,0 +1,224 @@
+openapi: 3.1.0
+info:
+  title: Local On-Prem TTS Service
+  version: 1.0.0
+  description: >
+    Fast local TTS service intended for Apple Silicon laptops in Docker.
+    Provides voice listing and speech synthesis for text or SSML.
+servers:
+  - url: http://localhost:8088
+
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: ["ok"] }
+                  engine: { type: string, example: "piper" }
+                  version: { type: string, example: "1.0.0" }
+                required: [status, engine]
+
+  /v1/voices:
+    get:
+      summary: List available voices
+      parameters:
+        - name: language_code
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "en-US"
+      responses:
+        "200":
+          description: Voice list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoicesResponse"
+
+  /v1/tts/synthesize:
+    post:
+      summary: Synthesize speech from text or SSML
+      description: >
+        Returns audio bytes by default. If return_mode="url", returns an audio_url.
+        For maximum speed on laptop CPU, use output_format="wav".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SynthesizeRequest"
+      responses:
+        "200":
+          description: Audio bytes OR JSON with audio_url depending on return_mode
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SynthesizeUrlResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error (e.g., text too long)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Synthesis failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/audio/{audio_id}:
+    get:
+      summary: Fetch cached audio by id (only used when return_mode="url")
+      parameters:
+        - name: audio_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audio bytes
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    VoicesResponse:
+      type: object
+      properties:
+        voices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Voice"
+      required: [voices]
+
+    Voice:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Voice identifier used in synthesize requests
+          example: "en_US_female_1"
+        name:
+          type: string
+          example: "English US Female 1"
+        language_code:
+          type: string
+          example: "en-US"
+        gender:
+          type: string
+          enum: ["Female", "Male", "Neutral", "Unknown"]
+        sample_rates:
+          type: array
+          items: { type: integer }
+          example: [16000, 22050]
+        engines:
+          type: array
+          items: { type: string }
+          example: ["standard"]
+      required: [id, language_code]
+
+    SynthesizeRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Text or SSML input
+          minLength: 1
+          maxLength: 8000
+        text_type:
+          type: string
+          enum: ["text", "ssml"]
+          default: "text"
+        voice_id:
+          type: string
+          description: Voice identifier from /v1/voices
+        output_format:
+          type: string
+          enum: ["wav", "mp3"]
+          default: "wav"
+        sample_rate:
+          type: integer
+          enum: [8000, 16000, 22050, 24000]
+          default: 22050
+        speaking_rate:
+          type: number
+          description: Optional rate multiplier. 1.0 is default.
+          default: 1.0
+        return_mode:
+          type: string
+          description: >
+            "bytes" returns audio bytes directly.
+            "url" returns a JSON payload with audio_url and audio_id.
+          enum: ["bytes", "url"]
+          default: "bytes"
+        cache_ttl_seconds:
+          type: integer
+          description: TTL for cached audio if return_mode="url"
+          default: 3600
+      required: [text, voice_id]
+
+    SynthesizeUrlResponse:
+      type: object
+      properties:
+        audio_id:
+          type: string
+        audio_url:
+          type: string
+          example: "/v1/audio/abc123"
+        content_type:
+          type: string
+          example: "audio/wav"
+        expires_in:
+          type: integer
+          example: 3600
+      required: [audio_id, audio_url, content_type]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: "InvalidVoiceIdException" }
+            message: { type: string }
+          required: [code, message]
+        request_id:
+          type: string
+      required: [error]

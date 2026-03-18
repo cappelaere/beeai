@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RealtyIQ Agent{% endblock %}</title>
+    {% load static %}
+    <link rel="icon" type="image/png" href="{% static 'favicon.png' %}">
+    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=1771682137">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script>
+      (function () {
+        var key = "realtyiq-theme";
+        var stored = localStorage.getItem(key) || "light";
+        var theme = stored === "system"
+          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : stored;
+        document.documentElement.classList.add("theme-" + theme);
+      })();
+    </script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header class="topbar">
+        <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle sidebar" title="Toggle sidebar">
+            <svg class="nav-toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <a href="{% url 'chat' %}" class="topbar-brand">
+            <span class="topbar-logo" aria-hidden="true">
+                <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="48" height="48" rx="8" fill="#0f62fe"/>
+                    <path d="M24 8L32 16H28V24H32L24 32L16 24H20V16H16L24 8Z" fill="white"/>
+                    <circle cx="24" cy="36" r="2" fill="#78a9ff"/>
+                </svg>
+            </span>
+            <div class="topbar-text">
+                <span class="topbar-title">RealtyIQ</span>
+                <span class="topbar-tagline">GRES Reporting and Business Intelligence using Agentic AI</span>
+            </div>
+        </a>
+        <div class="topbar-actions">
+            <div class="notifications-wrapper">
+                <button type="button" class="notifications-bell" id="notifications-bell" aria-label="Notifications" aria-expanded="false" aria-haspopup="true" title="Notifications">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="notifications-badge" id="notifications-badge" aria-hidden="true" style="display: none;">0</span>
+                </button>
+                <div class="notifications-dropdown" id="notifications-dropdown" role="menu" aria-label="Notification list" hidden>
+                    <div class="notifications-dropdown-header">
+                        <span>Notifications</span>
+                        <button type="button" class="notifications-mark-all-read" id="notifications-mark-all-read" title="Mark all as read">Mark all read</button>
+                    </div>
+                    <div class="notifications-list" id="notifications-list">
+                        <div class="notifications-loading" id="notifications-loading">Loading…</div>
+                    </div>
+                    <div class="notifications-dropdown-footer">
+                        <a href="{% url 'task_list' %}">My Tasks</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+    <div class="app-layout">
+        <nav class="nav" id="sidebar-nav" aria-label="Main navigation">
+            <div class="nav-resizer" id="nav-resizer"></div>
+            <a href="{% url 'chat' %}" class="nav-link">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                </span>
+                <span class="nav-label">Home</span>
+            </a>
+            
+            <!-- Chats Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="chats-toggle" onclick="toggleNavSection('chats')" aria-expanded="true" aria-controls="chats-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Chats</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="chats-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="chats-section">
+                <a href="{% url 'chat' %}" class="nav-link" id="new-chat-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </span>
+                    <span class="nav-label">New Chat</span>
+                </a>
+                <a href="{% url 'prompts' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </span>
+                    <span class="nav-label">Prompts</span>
+                </a>
+            </div>
+            
+            <!-- Agents Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="agents-toggle" onclick="toggleNavSection('agents')" aria-expanded="true" aria-controls="agents-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Agents</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="agents-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="agents-section">
+                <a href="{% url 'agents_list' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </span>
+                    <span class="nav-label">Agent Collection</span>
+                </a>
+                {% if user_role == 'admin' %}
+                <a href="{% url 'agent_studio' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 3v18"/><path d="M15 3v18"/><circle cx="9" cy="9" r="2"/><circle cx="15" cy="15" r="2"/></svg>
+                    </span>
+                    <span class="nav-label">Agent Studio</span>
+                </a>
+                {% endif %}
+            </div>
+            
+            <!-- Documents Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="documents-toggle" onclick="toggleNavSection('documents')" aria-expanded="true" aria-controls="documents-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Documents</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="documents-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="documents-section">
+                <a href="{% url 'document_upload' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </span>
+                    <span class="nav-label">Upload</span>
+                </a>
+                <a href="{% url 'document_library' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M2 10h20"/><rect x="6" y="14" width="4" height="6" rx="1"/><rect x="14" y="14" width="4" height="6" rx="1"/></svg>
+                    </span>
+                    <span class="nav-label">Document Collection</span>
+                </a>
+            </div>
+            
+            <!-- Cards Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="cards-toggle" onclick="toggleNavSection('cards')" aria-expanded="true" aria-controls="cards-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M7 15h10"/>
+                    <path d="M7 11h4"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Cards</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="cards-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="cards-section">
+                <a href="{% url 'card_create' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    </span>
+                    <span class="nav-label">Create Card</span>
+                </a>
+                <a href="{% url 'cards' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    </span>
+                    <span class="nav-label">Card Collection</span>
+                </a>
+            </div>
+            
+            <!-- Workflows Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="workflows-toggle" onclick="toggleNavSection('workflows')" aria-expanded="true" aria-controls="workflows-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m6.36 6.36l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m6.36-6.36l4.24-4.24"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Workflows</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="workflows-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="workflows-section">
+                <a href="{% url 'workflows_list' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.21 12 6.81 16.5 4.21"/><polyline points="7.5 19.79 7.5 14.6 3 12"/><polyline points="21 12 16.5 14.6 16.5 19.79"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    </span>
+                    <span class="nav-label">Available Workflows</span>
+                </a>
+                <a href="{% url 'schedule_list' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </span>
+                    <span class="nav-label">Scheduler</span>
+                </a>
+                <a href="{% url 'workflow_runs_list' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                    </span>
+                    <span class="nav-label">Previous Runs</span>
+                </a>
+                {% if user_role == 'admin' %}
+                <a href="{% url 'workflow_studio' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                    </span>
+                    <span class="nav-label">Workflow Studio</span>
+                </a>
+                {% endif %}
+            </div>
+            
+            <!-- Tasks Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="tasks-toggle" onclick="toggleNavSection('tasks')" aria-expanded="true" aria-controls="tasks-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Tasks</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="tasks-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="tasks-section">
+                <a href="{% url 'task_list' %}" class="nav-link" id="my-tasks-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    </span>
+                    <span class="nav-label">My Tasks</span>
+                    <span id="task-badge" class="task-count-badge" style="display: none; margin-left: auto; background: #f44336; color: white; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.75rem; font-weight: 600;"></span>
+                </a>
+                <a href="{% url 'task_templates' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="13" x2="8" y2="13"/><line x1="12" y1="17" x2="8" y2="17"/></svg>
+                    </span>
+                    <span class="nav-label">Task Templates</span>
+                </a>
+            </div>
+            
+            <!-- Observability Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="observability-toggle" onclick="toggleNavSection('observability')" aria-expanded="true" aria-controls="observability-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Observability</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="observability-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="observability-section">
+                <a href="{% url 'dashboard' %}" class="nav-link">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    </span>
+                    <span class="nav-label">Dashboard</span>
+                </a>
+                
+                <a href="{% url 'logs_view' %}" class="nav-link">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </span>
+                <span class="nav-label">Logs</span>
+            </a>
+            
+            <a href="{% url 'prometheus_view' %}" class="nav-link">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 3v18h18"/>
+                        <path d="M18 17V9"/>
+                        <path d="M13 17v-6"/>
+                        <path d="M8 17v-3"/>
+                    </svg>
+                </span>
+                <span class="nav-label">Metrics (Internal)</span>
+                </a>
+                
+                <a href="http://localhost:9090" class="nav-link" target="_blank" rel="noopener noreferrer" title="Open Prometheus Dashboard">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">Prometheus<span class="visually-hidden"> (opens in new window)</span></span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;" aria-hidden="true">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </a>
+                
+                <a href="http://localhost:3000" class="nav-link" target="_blank" rel="noopener noreferrer" title="Open Grafana Dashboard">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="9"/>
+                            <rect x="14" y="3" width="7" height="5"/>
+                            <rect x="14" y="12" width="7" height="9"/>
+                            <rect x="3" y="16" width="7" height="5"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">Grafana<span class="visually-hidden"> (opens in new window)</span></span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;" aria-hidden="true">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </a>
+                
+                {% if langfuse_dashboard_url %}
+                <a href="{{ langfuse_dashboard_url }}" class="nav-link" target="_blank" rel="noopener noreferrer" title="Open Langfuse Observability Dashboard">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">Langfuse<span class="visually-hidden"> (opens in new window)</span></span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;" aria-hidden="true">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </a>
+                {% endif %}
+            </div><!-- End of observability-section -->
+            
+            <!-- Docs Section -->
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <button class="nav-section-toggle" id="docs-toggle" onclick="toggleNavSection('docs')" aria-expanded="true" aria-controls="docs-section">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-icon">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                </svg>
+                <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Docs</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="docs-chevron">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            
+            <div class="nav-section-content" id="docs-section">
+                <!-- User Guide Subsection -->
+                <button class="nav-section-toggle" id="docs-users-toggle" onclick="toggleNavSection('docs-users')" aria-expanded="true" aria-controls="docs-users-section" style="margin-left: 0.5rem; font-size: 0.7rem;">
+                    <span>For Users</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="docs-users-chevron">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                <div class="nav-section-content" id="docs-users-section" style="margin-left: 0.5rem;">
+                    <a href="{% url 'docs_view' path='user-guide/workflow_management/QUICK_REFERENCE.md' %}" class="nav-link">
+                        <span class="nav-label">Commands Quick Ref</span>
+                    </a>
+                    <a href="{% url 'docs_view' path='user-guide/workflow_management/WORKFLOW_AND_TASK_GUIDE.md' %}" class="nav-link">
+                        <span class="nav-label">Workflow & Task Guide</span>
+                    </a>
+                    <a href="{% url 'docs_view' path='user-guide/README.md' %}" class="nav-link">
+                        <span class="nav-label">User Guide Index</span>
+                    </a>
+                </div>
+                
+                <!-- Developer Guide Subsection -->
+                <button class="nav-section-toggle" id="docs-devs-toggle" onclick="toggleNavSection('docs-devs')" aria-expanded="true" aria-controls="docs-devs-section" style="margin-left: 0.5rem; font-size: 0.7rem; margin-top: 0.25rem;">
+                    <span>For Developers</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="nav-section-chevron" id="docs-devs-chevron">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                <div class="nav-section-content" id="docs-devs-section" style="margin-left: 0.5rem;">
+                    <a href="{% url 'docs_view' path='developer-guide/setup/SHELL_SETUP.md' %}" class="nav-link">
+                        <span class="nav-label">Setup Guide</span>
+                    </a>
+                    <a href="{% url 'docs_view' path='developer-guide/section508/SECTION_508_SUMMARY.md' %}" class="nav-link">
+                        <span class="nav-label">Section 508 Implementation</span>
+                    </a>
+                    <a href="{% url 'docs_view' path='developer-guide/testing/TESTING.md' %}" class="nav-link">
+                        <span class="nav-label">Testing Guide</span>
+                    </a>
+                    <a href="{% url 'docs_view' path='SPECS.md' %}" class="nav-link">
+                        <span class="nav-label">Technical Specs</span>
+                    </a>
+                    <a href="{% url 'docs_view' path='developer-guide/README.md' %}" class="nav-link">
+                        <span class="nav-label">Developer Guide Index</span>
+                    </a>
+                </div>
+                
+                <!-- Documentation Hub -->
+                <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+                <a href="{% url 'docs_view' path='README.md' %}" class="nav-link">
+                    <span class="nav-label">Documentation Hub</span>
+                </a>
+            </div>
+            
+            <div class="nav-divider" style="margin: 0.5rem 0; border-top: 1px solid rgba(128, 128, 128, 0.2);"></div>
+            <a href="{% url 'settings' %}" class="nav-link">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.05-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.05 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </span>
+                <span class="nav-label">Settings</span>
+            </a>
+            <a href="{% url 'examples' %}" class="nav-link">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                </span>
+                <span class="nav-label">Examples</span>
+            </a>
+            <a href="https://realestatesales.gov" class="nav-link" target="_blank" rel="noopener noreferrer">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                </span>
+                <span class="nav-label">Back to GRES<span class="visually-hidden"> (opens in new window)</span></span>
+            </a>
+        </nav>
+        <main id="main-content" class="content" role="main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <footer class="app-footer" role="contentinfo">
+        <div class="footer-version">
+            <span class="version-label">v{{ APP_VERSION }}</span>
+        </div>
+        <div class="footer-content">
+            <svg class="footer-logo" width="24" height="24" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="IBM logo">
+                <path d="M0 10h8v2H0zm0 4h8v2H0zm0 4h8v2H0zm10-8h8v2h-8zm0 4h8v2h-8zm0 4h8v2h-8zm10-8h12v2H20zm0 4h12v2H20zm0 4h12v2H20zm-10 4h8v2h-8zm0 4h8v2h-8zm10-4h12v2H20zm0 4h12v2H20zM0 22h8v2H0zm0 4h8v2H0z"/>
+            </svg>
+            <p>Powered by IBM BeeAI - Built by IBM Federal Consulting</p>
+        </div>
+    </footer>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+        <!-- Use full highlight.js bundle to avoid module errors -->
+        <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js?v=2.0"></script>
+    <script src="{% static 'js/theme.js' %}?v=2.0"></script>
+    <script src="{% static 'js/nav.js' %}?v=2.0"></script>
+    <script src="{% static 'js/nav-resize.js' %}?v=2.0"></script>
+    <script>
+        // Initialize Section 508 from server-side value
+        window.SECTION_508_ENABLED = {{ SECTION_508_ENABLED|lower }};
+        
+        // Collapsible nav section toggle
+        function toggleNavSection(sectionId) {
+            var section = document.getElementById(sectionId + '-section');
+            var toggle = document.getElementById(sectionId + '-toggle');
+            var chevron = document.getElementById(sectionId + '-chevron');
+            
+            if (section.classList.contains('collapsed')) {
+                section.classList.remove('collapsed');
+                toggle.setAttribute('aria-expanded', 'true');
+                chevron.style.transform = 'rotate(0deg)';
+                localStorage.setItem('nav-' + sectionId, 'expanded');
+            } else {
+                section.classList.add('collapsed');
+                toggle.setAttribute('aria-expanded', 'false');
+                chevron.style.transform = 'rotate(-90deg)';
+                localStorage.setItem('nav-' + sectionId, 'collapsed');
+            }
+        }
+        
+        // Restore collapse state from localStorage
+        document.addEventListener('DOMContentLoaded', function() {
+            // Restore observability section state
+            var observabilityState = localStorage.getItem('nav-observability');
+            if (observabilityState === 'collapsed') {
+                var section = document.getElementById('observability-section');
+                var toggle = document.getElementById('observability-toggle');
+                var chevron = document.getElementById('observability-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore chats section state
+            var chatsState = localStorage.getItem('nav-chats');
+            if (chatsState === 'collapsed') {
+                var section = document.getElementById('chats-section');
+                var toggle = document.getElementById('chats-toggle');
+                var chevron = document.getElementById('chats-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore agents section state
+            var agentsState = localStorage.getItem('nav-agents');
+            if (agentsState === 'collapsed') {
+                var section = document.getElementById('agents-section');
+                var toggle = document.getElementById('agents-toggle');
+                var chevron = document.getElementById('agents-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore documents section state
+            var documentsState = localStorage.getItem('nav-documents');
+            if (documentsState === 'collapsed') {
+                var section = document.getElementById('documents-section');
+                var toggle = document.getElementById('documents-toggle');
+                var chevron = document.getElementById('documents-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore cards section state
+            var cardsState = localStorage.getItem('nav-cards');
+            if (cardsState === 'collapsed') {
+                var section = document.getElementById('cards-section');
+                var toggle = document.getElementById('cards-toggle');
+                var chevron = document.getElementById('cards-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore workflows section state
+            var workflowsState = localStorage.getItem('nav-workflows');
+            if (workflowsState === 'collapsed') {
+                var section = document.getElementById('workflows-section');
+                var toggle = document.getElementById('workflows-toggle');
+                var chevron = document.getElementById('workflows-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore tasks section state
+            var tasksState = localStorage.getItem('nav-tasks');
+            if (tasksState === 'collapsed') {
+                var section = document.getElementById('tasks-section');
+                var toggle = document.getElementById('tasks-toggle');
+                var chevron = document.getElementById('tasks-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore docs section state
+            var docsState = localStorage.getItem('nav-docs');
+            if (docsState === 'collapsed') {
+                var section = document.getElementById('docs-section');
+                var toggle = document.getElementById('docs-toggle');
+                var chevron = document.getElementById('docs-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore docs-users subsection state
+            var docsUsersState = localStorage.getItem('nav-docs-users');
+            if (docsUsersState === 'collapsed') {
+                var section = document.getElementById('docs-users-section');
+                var toggle = document.getElementById('docs-users-toggle');
+                var chevron = document.getElementById('docs-users-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Restore docs-devs subsection state
+            var docsDevsState = localStorage.getItem('nav-docs-devs');
+            if (docsDevsState === 'collapsed') {
+                var section = document.getElementById('docs-devs-section');
+                var toggle = document.getElementById('docs-devs-toggle');
+                var chevron = document.getElementById('docs-devs-chevron');
+                if (section && toggle && chevron) {
+                    section.classList.add('collapsed');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    chevron.style.transform = 'rotate(-90deg)';
+                }
+            }
+            
+            // Fetch and display task count badge
+            fetchTaskCount();
+        });
+        
+        function fetchTaskCount() {
+            fetch('/api/tasks/count/')
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.getElementById('task-badge');
+                    if (badge && data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'inline-block';
+                    } else if (badge) {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching task count:', error);
+                });
+        }
+        
+        // Refresh task count every 30 seconds
+        setInterval(fetchTaskCount, 30000);
+    </script>
+    <script>
+        // Notifications bell and dropdown
+        (function() {
+            var bell = document.getElementById('notifications-bell');
+            var badge = document.getElementById('notifications-badge');
+            var dropdown = document.getElementById('notifications-dropdown');
+            var listEl = document.getElementById('notifications-list');
+            var loadingEl = document.getElementById('notifications-loading');
+            var markAllBtn = document.getElementById('notifications-mark-all-read');
+            var open = false;
+
+            function getCsrf() {
+                var el = document.querySelector('[name=csrfmiddlewaretoken]');
+                if (el && el.value) return el.value;
+                if (window.CSRF_TOKEN) return window.CSRF_TOKEN;
+                var match = document.cookie.match(/csrftoken=([^;]+)/);
+                return match ? decodeURIComponent(match[1]) : '';
+            }
+
+            function fetchNotifications() {
+                if (loadingEl) loadingEl.style.display = 'block';
+                fetch('/api/notifications/?limit=30')
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (loadingEl) loadingEl.style.display = 'none';
+                        renderNotifications(data.notifications || []);
+                        if (badge) {
+                            var n = data.unread_count || 0;
+                            badge.textContent = n > 99 ? '99+' : n;
+                            badge.style.display = n > 0 ? 'inline' : 'none';
+                        }
+                    })
+                    .catch(function() {
+                        if (loadingEl) loadingEl.textContent = 'Failed to load';
+                    });
+            }
+
+            function renderNotifications(items) {
+                if (!listEl) return;
+                if (items.length === 0) {
+                    listEl.innerHTML = '<div class="notifications-empty">No notifications</div>';
+                    return;
+                }
+                var html = '';
+                items.forEach(function(n) {
+                    var url = n.task_id ? '/workflows/tasks/' + n.task_id + '/' : (n.workflow_run_id ? '/workflows/runs/' + n.workflow_run_id + '/' : '#');
+                    var readClass = n.read_at ? ' notification-read' : '';
+                    var timeAgo = n.created_at ? (n.created_at.replace('T', ' ').substring(0, 19)) : '';
+                    html += '<div class="notification-item' + readClass + '" data-id="' + n.id + '">';
+                    html += '<a href="' + url + '" class="notification-link">';
+                    html += '<span class="notification-title">' + (n.title || '').replace(/</g, '&lt;') + '</span>';
+                    html += '<span class="notification-message">' + (n.message || '').replace(/</g, '&lt;').substring(0, 120) + (n.message && n.message.length > 120 ? '…' : '') + '</span>';
+                    html += '<span class="notification-time">' + timeAgo + '</span>';
+                    html += '</a>';
+                    if (!n.read_at) {
+                        html += '<button type="button" class="notification-mark-read" title="Mark as read" data-id="' + n.id + '">Mark read</button>';
+                    }
+                    html += '</div>';
+                });
+                listEl.innerHTML = html;
+                listEl.querySelectorAll('.notification-mark-read').forEach(function(btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var id = btn.getAttribute('data-id');
+                        fetch('/api/notifications/' + id + '/read/', { method: 'POST', headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' }, credentials: 'same-origin' })
+                            .then(function() { fetchNotifications(); });
+                    });
+                });
+            }
+
+            function toggleDropdown() {
+                open = !open;
+                if (dropdown) {
+                    dropdown.hidden = !open;
+                    if (open) fetchNotifications();
+                }
+                if (bell) bell.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+
+            if (bell) {
+                bell.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleDropdown();
+                });
+            }
+            if (markAllBtn) {
+                markAllBtn.addEventListener('click', function() {
+                    fetch('/api/notifications/read-all/', { method: 'POST', headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' }, credentials: 'same-origin' })
+                        .then(function() { fetchNotifications(); });
+                });
+            }
+            document.addEventListener('click', function(e) {
+                if (open && dropdown && !dropdown.contains(e.target) && bell && !bell.contains(e.target)) {
+                    open = false;
+                    dropdown.hidden = true;
+                    if (bell) bell.setAttribute('aria-expanded', 'false');
+                }
+            });
+            dropdown && dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+            // Initial badge count
+            fetch('/api/notifications/?limit=1').then(function(r) { return r.json(); }).then(function(d) {
+                if (badge && d.unread_count > 0) {
+                    badge.textContent = d.unread_count > 99 ? '99+' : d.unread_count;
+                    badge.style.display = 'inline';
+                }
+            }).catch(function() {});
+        })();
+    </script>
+    <script src="{% static 'js/section508.js' %}?v=1.5"></script>
+    <style>
+        .nav-section-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background: none;
+            border: none;
+            color: inherit;
+            opacity: 0.7;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .nav-section-toggle:hover {
+            opacity: 1;
+            background: rgba(128, 128, 128, 0.1);
+        }
+        
+        .nav-section-chevron {
+            transition: transform 0.2s ease;
+        }
+        
+        .nav-section-content {
+            max-height: 1000px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            opacity: 1;
+        }
+        
+        .nav-section-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+    </style>
+    <script>
+        // Handle "New Chat" link to clear session and context
+        document.addEventListener('DOMContentLoaded', function() {
+            var newChatLink = document.getElementById('new-chat-link');
+            if (newChatLink) {
+                newChatLink.addEventListener('click', function(e) {
+                    // Only intercept if we're on the chat page
+                    if (window.location.pathname === '/' || window.location.pathname === '/chat/') {
+                        e.preventDefault();
+                        
+                        // Clear any cached chat context
+                        if (typeof currentSessionId !== 'undefined') {
+                            currentSessionId = null;
+                        }
+                        
+                        // Clear localStorage cache if present
+                        if (localStorage) {
+                            // Clear any chat-related cache keys
+                            var keysToRemove = [];
+                            for (var i = 0; i < localStorage.length; i++) {
+                                var key = localStorage.key(i);
+                                if (key && (key.startsWith('chat-') || key.startsWith('session-') || key.startsWith('message-'))) {
+                                    keysToRemove.push(key);
+                                }
+                            }
+                            keysToRemove.forEach(function(key) {
+                                localStorage.removeItem(key);
+                            });
+                        }
+                        
+                        // Clear sessionStorage cache if present
+                        if (sessionStorage) {
+                            var sessionKeysToRemove = [];
+                            for (var i = 0; i < sessionStorage.length; i++) {
+                                var key = sessionStorage.key(i);
+                                if (key && (key.startsWith('chat-') || key.startsWith('session-') || key.startsWith('message-'))) {
+                                    sessionKeysToRemove.push(key);
+                                }
+                            }
+                            sessionKeysToRemove.forEach(function(key) {
+                                sessionStorage.removeItem(key);
+                            });
+                        }
+                        
+                        // Trigger new session creation if function exists
+                        if (typeof newSession === 'function') {
+                            newSession();
+                        } else {
+                            // Clear message list
+                            var messageList = document.getElementById('message-list');
+                            if (messageList) {
+                                messageList.innerHTML = '';
+                            }
+                            
+                            // Focus on prompt input
+                            var promptInput = document.getElementById('prompt-input');
+                            if (promptInput) {
+                                promptInput.value = '';
+                                promptInput.focus();
+                            }
+                        }
+                    }
+                    // If not on chat page, allow normal navigation to occur
+                });
+            }
+        });
+    </script>
+        {% block extra_js %}
+        <script src="{% static 'js/autocomplete.js' %}?v=1.5"></script>
+        {% endblock %}
+    </body>
+</html>

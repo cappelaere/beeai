@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_bidder_onboarding" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="BidderOnboarding_Process" name="Bidder Onboarding &#38; Verification" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start" />
+    <bpmn:sequenceFlow id="Flow_start_to_1" sourceRef="StartEvent_1" targetRef="validate_input" />
+    <bpmn:serviceTask id="validate_input" name="Validate input" />
+    <bpmn:sequenceFlow id="Flow_1_to_2" sourceRef="validate_input" targetRef="check_property_status" />
+    <bpmn:serviceTask id="check_property_status" name="Check property status" />
+    <bpmn:sequenceFlow id="Flow_2_to_3" sourceRef="check_property_status" targetRef="check_sam_compliance" />
+    <bpmn:serviceTask id="check_sam_compliance" name="Check SAM.gov compliance" />
+    <bpmn:sequenceFlow id="Flow_3_to_gateway" sourceRef="check_sam_compliance" targetRef="Gateway_SAM_Decision" />
+    <bpmn:exclusiveGateway id="Gateway_SAM_Decision" name="SAM Passed?">
+      <bpmn:incoming>Flow_3_to_gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_gateway_yes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_gateway_no</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_gateway_yes" name="Yes" sourceRef="Gateway_SAM_Decision" targetRef="check_ofac_compliance">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${sam_passed == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_gateway_no" name="No" sourceRef="Gateway_SAM_Decision" targetRef="finalize_status">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${sam_passed == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:serviceTask id="check_ofac_compliance" name="Check OFAC SDN compliance" />
+    <bpmn:sequenceFlow id="Flow_4_to_5" sourceRef="check_ofac_compliance" targetRef="determine_eligibility" />
+    <bpmn:serviceTask id="determine_eligibility" name="Determine eligibility" />
+    <bpmn:sequenceFlow id="Flow_5_to_6" sourceRef="determine_eligibility" targetRef="request_human_review" />
+    <bpmn:serviceTask id="request_human_review" name="Request human review" />
+    <bpmn:sequenceFlow id="Flow_6_to_7" sourceRef="request_human_review" targetRef="process_human_review" />
+    <bpmn:userTask id="process_human_review" name="Process human review">
+      <bpmn:incoming>Flow_6_to_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_7_to_8</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_7_to_8" sourceRef="process_human_review" targetRef="finalize_status" />
+    <bpmn:serviceTask id="finalize_status" name="Finalize status">
+      <bpmn:incoming>Flow_7_to_8</bpmn:incoming>
+      <bpmn:incoming>Flow_gateway_no</bpmn:incoming>
+      <bpmn:outgoing>Flow_8_to_9</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_8_to_9" sourceRef="finalize_status" targetRef="create_audit_log" />
+    <bpmn:serviceTask id="create_audit_log" name="Create audit log" />
+    <bpmn:sequenceFlow id="Flow_9_to_end" sourceRef="create_audit_log" targetRef="EndEvent_1" />
+    <bpmn:endEvent id="EndEvent_1" name="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="BidderOnboarding_Process">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="312" y="12" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="318" y="-12" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="validate_input_di" bpmnElement="validate_input">
+        <dc:Bounds x="270" y="80" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="check_property_status_di" bpmnElement="check_property_status">
+        <dc:Bounds x="270" y="180" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="check_sam_compliance_di" bpmnElement="check_sam_compliance">
+        <dc:Bounds x="270" y="280" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_SAM_Decision_di" bpmnElement="Gateway_SAM_Decision" isMarkerVisible="true">
+        <dc:Bounds x="305" y="375" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="295" y="351" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="check_ofac_compliance_di" bpmnElement="check_ofac_compliance">
+        <dc:Bounds x="270" y="480" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="determine_eligibility_di" bpmnElement="determine_eligibility">
+        <dc:Bounds x="270" y="580" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="request_human_review_di" bpmnElement="request_human_review">
+        <dc:Bounds x="270" y="680" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="process_human_review_di" bpmnElement="process_human_review">
+        <dc:Bounds x="270" y="780" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="finalize_status_di" bpmnElement="finalize_status">
+        <dc:Bounds x="270" y="920" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="create_audit_log_di" bpmnElement="create_audit_log">
+        <dc:Bounds x="270" y="1020" width="120" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="312" y="1142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="320" y="1178" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_start_to_1_di" bpmnElement="Flow_start_to_1">
+        <di:waypoint x="330" y="48" />
+        <di:waypoint x="330" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_to_2_di" bpmnElement="Flow_1_to_2">
+        <di:waypoint x="330" y="140" />
+        <di:waypoint x="330" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_to_3_di" bpmnElement="Flow_2_to_3">
+        <di:waypoint x="330" y="240" />
+        <di:waypoint x="330" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_to_gateway_di" bpmnElement="Flow_3_to_gateway">
+        <di:waypoint x="330" y="340" />
+        <di:waypoint x="330" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_gateway_yes_di" bpmnElement="Flow_gateway_yes">
+        <di:waypoint x="330" y="425" />
+        <di:waypoint x="330" y="480" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="336" y="450" width="18" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_gateway_no_di" bpmnElement="Flow_gateway_no">
+        <di:waypoint x="355" y="400" />
+        <di:waypoint x="480" y="400" />
+        <di:waypoint x="480" y="950" />
+        <di:waypoint x="390" y="950" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="410" y="383" width="15" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_to_5_di" bpmnElement="Flow_4_to_5">
+        <di:waypoint x="330" y="540" />
+        <di:waypoint x="330" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_to_6_di" bpmnElement="Flow_5_to_6">
+        <di:waypoint x="330" y="640" />
+        <di:waypoint x="330" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_to_7_di" bpmnElement="Flow_6_to_7">
+        <di:waypoint x="330" y="740" />
+        <di:waypoint x="330" y="780" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_to_8_di" bpmnElement="Flow_7_to_8">
+        <di:waypoint x="330" y="860" />
+        <di:waypoint x="330" y="920" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_to_9_di" bpmnElement="Flow_8_to_9">
+        <di:waypoint x="330" y="980" />
+        <di:waypoint x="330" y="1020" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_9_to_end_di" bpmnElement="Flow_9_to_end">
+        <di:waypoint x="330" y="1080" />
+        <di:waypoint x="330" y="1142" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

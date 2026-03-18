@@ -1,0 +1,30 @@
+category: Compliance
+description: Automates bidder registration with SAM.gov and OFAC compliance screening.
+  Screens against 138K exclusions and 18K SDN records, then applies auto-approval
+  logic.
+documentation_path: workflows/bidder_onboarding/documentation.md
+estimated_duration: < 5 seconds
+icon: ⚙️
+id: bidder_onboarding
+input_schema:
+  bidder_name:
+    label: bidder_name
+    type: string
+  email:
+    label: email
+    type: email
+  phone:
+    label: phone
+    type: string
+  property_id:
+    label: property_id
+    type: integer
+  age_accepted:
+    label: age_accepted
+    type: checkbox
+  terms_accepted:
+    label: terms_accepted
+    type: checkbox
+name: Bidder Onboarding & Verification
+outputs: []
+workflow_number: 1

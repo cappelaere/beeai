@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  id="Definitions_P015M" targetNamespace="http://example.com/p015m">
+  <bpmn:message id="ext_msg" name="ExternalSignal" />
+  <bpmn:process id="Process_P015M" isExecutable="true">
+    <bpmn:startEvent id="start_m" name="Start">
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="start_m" targetRef="task_msg_a" />
+    <bpmn:serviceTask id="task_msg_a" name="A">
+      <bpmn:incoming>f0</bpmn:incoming>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f1" sourceRef="task_msg_a" targetRef="msg_catch" />
+    <bpmn:intermediateCatchEvent id="msg_catch" name="WaitMsg">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="ext_msg" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="f2" sourceRef="msg_catch" targetRef="task_msg_b" />
+    <bpmn:serviceTask id="task_msg_b" name="B">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f3" sourceRef="task_msg_b" targetRef="end_m" />
+    <bpmn:endEvent id="end_m" name="End">
+      <bpmn:incoming>f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+piper_tts/venv/
+
+# Packaging / build
+*.egg-info/
+build/
+dist/
+
+# Django / local app state
+db.sqlite3
+db.sqlite3-journal
+*.log
+*.pot
+staticfiles/
+media/
+
+# Local data / generated databases
+*.db
+*.db-journal
+langfuse.db
+prometheus_data/
+prometheus-backfill-blocks/
+
+# Logs
+logs/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Testing / tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / IDE
+.cursor/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.backup
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Project-specific local folders
+Api/
+
+# Keep source datasets
+!data/source/*.csv
+!data/source/*.CSV
+!data/source/*.sql

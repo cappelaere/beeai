@@ -1,0 +1,111 @@
+{% load markdown_filters %}
+{% with data=run.output_data %}
+<div class="bi-weekly-report-results">
+    {% if data.executive_brief_markdown %}
+    <section class="bi-section bi-executive-brief">
+        <h2>Executive Brief</h2>
+        <div class="bi-brief-html">{{ data.executive_brief_markdown|markdown_to_html }}</div>
+    </section>
+    {% endif %}
+    {% if data.portfolio_totals %}
+    <section class="bi-section">
+        <h2>Portfolio Totals</h2>
+        <table class="bi-table data-table"><tbody>
+            {% for key, value in data.portfolio_totals.items %}
+            <tr><th>{{ key|title }}</th><td>{{ value }}</td></tr>
+            {% endfor %}
+        </tbody></table>
+    </section>
+    {% endif %}
+    {% if data.top_performers %}
+    <section class="bi-section">
+        <h2>Top Performers</h2>
+        <table class="bi-table data-table"><thead><tr>
+            {% for key, value in data.top_performers.0.items %}
+            <th>{{ key|title }}</th>
+            {% endfor %}
+        </tr></thead><tbody>
+            {% for row in data.top_performers %}
+            <tr>{% for key, value in row.items %}<td>{{ value|default:"" }}</td>{% endfor %}</tr>
+            {% endfor %}
+        </tbody></table>
+    </section>
+    {% endif %}
+    {% if data.properties_needing_attention %}
+    <section class="bi-section">
+        <h2>Properties Needing Attention</h2>
+        <table class="bi-table data-table"><thead><tr>
+            {% for key, value in data.properties_needing_attention.0.items %}
+            <th>{{ key|title }}</th>
+            {% endfor %}
+        </tr></thead><tbody>
+            {% for row in data.properties_needing_attention %}
+            <tr>{% for key, value in row.items %}<td>{{ value|default:"" }}</td>{% endfor %}</tr>
+            {% endfor %}
+        </tbody></table>
+    </section>
+    {% endif %}
+    {% if data.funnel %}
+    <section class="bi-section">
+        <h2>Conversion Funnel</h2>
+        <table class="bi-table data-table"><tbody>
+            {% for key, value in data.funnel.items %}
+            <tr><th>{{ key|title }}</th><td>{{ value }}</td></tr>
+            {% endfor %}
+        </tbody></table>
+    </section>
+    {% endif %}
+    {% if data.week_over_week_trend %}
+    <section class="bi-section">
+        <h2>Week-over-Week Trend</h2>
+        {% with w=data.week_over_week_trend %}
+        {% if w.pct_change %}
+        <table class="bi-table data-table"><tbody>
+            {% for key, value in w.pct_change.items %}
+            <tr><th>{{ key|title }}</th><td>{{ value }}%</td></tr>
+            {% endfor %}
+        </tbody></table>
+        {% elif w.error %}
+        <p>{{ w.error }}</p>
+        {% else %}
+        <pre>{{ w }}</pre>
+        {% endif %}
+        {% endwith %}
+    </section>
+    {% endif %}
+    {% if data.auction_readiness %}
+    <section class="bi-section">
+        <h2>Auction Readiness</h2>
+        <table class="bi-table data-table"><thead><tr>
+            {% for key, value in data.auction_readiness.0.items %}
+            <th>{{ key|title }}</th>
+            {% endfor %}
+        </tr></thead><tbody>
+            {% for row in data.auction_readiness %}
+            <tr>{% for key, value in row.items %}<td>{{ value|default:"" }}</td>{% endfor %}</tr>
+            {% endfor %}
+        </tbody></table>
+    </section>
+    {% endif %}
+    {% if data.recommended_actions %}
+    <section class="bi-section">
+        <h2>Recommended Actions</h2>
+        <ul class="bi-actions">
+            {% for action in data.recommended_actions %}
+            <li>{{ action }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+    {% if data.workflow_steps %}
+    <section class="bi-section">
+        <h2>Workflow Steps</h2>
+        <ol>
+            {% for step in data.workflow_steps %}
+            <li>{{ step }}</li>
+            {% endfor %}
+        </ol>
+    </section>
+    {% endif %}
+</div>
+{% endwith %}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" id="Definitions_gateway" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_gateway" isExecutable="true">
+    <bpmn:startEvent id="start" name="Start"/>
+    <bpmn:sequenceFlow id="flow_start" sourceRef="start" targetRef="task1"/>
+    <bpmn:serviceTask id="task1" name="First task"/>
+    <bpmn:sequenceFlow id="flow_to_gw" sourceRef="task1" targetRef="gw1"/>
+    <bpmn:exclusiveGateway id="gw1" name="Branch" default="flow_b"/>
+    <bpmn:sequenceFlow id="flow_a" sourceRef="gw1" targetRef="task_a">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">state.x == 1</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_b" sourceRef="gw1" targetRef="task_b">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">state.x == 2</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:serviceTask id="task_a" name="Task A"/>
+    <bpmn:sequenceFlow id="flow_a_end" sourceRef="task_a" targetRef="end"/>
+    <bpmn:serviceTask id="task_b" name="Task B"/>
+    <bpmn:sequenceFlow id="flow_b_end" sourceRef="task_b" targetRef="end"/>
+    <bpmn:endEvent id="end" name="End"/>
+  </bpmn:process>
+</bpmn:definitions>

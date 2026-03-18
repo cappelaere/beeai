@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BPMN Diagram Editor</title>
+  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.13.1/dist/assets/bpmn-js.css">
+  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.13.1/dist/assets/diagram-js.css">
+  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.13.1/dist/assets/bpmn-font/css/bpmn.css">
+  <script src="https://unpkg.com/bpmn-js@18.13.1/dist/bpmn-modeler.development.js"></script>
+  <style>
+    html, body, #canvas { height: 100%; padding: 0; margin: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="canvas"></div>
+  <script>
+    // Same pattern as bpmn-js-examples starter: diagram URL loaded via GET, then openDiagram(xml)
+    var diagramUrl = '{{ diagram_xml_url|escapejs }}';
+    var modeler = new BpmnJS({ container: '#canvas' });
+
+    function postToParent(message) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(message, window.location.origin);
+      }
+    }
+
+    function elementPayload(element) {
+      if (!element) {
+        return null;
+      }
+      var businessObject = element.businessObject || {};
+      return {
+        id: element.id || '',
+        name: businessObject.name || '',
+        type: businessObject.$type ? businessObject.$type.replace(/^bpmn:/, '') : (element.type || '')
+      };
+    }
+
+    function publishCurrentXml() {
+      modeler.saveXML({ format: true })
+        .then(function(result) {
+          postToParent({ type: 'bpmnDiagramChanged', xml: result.xml });
+        })
+        .catch(function(err) {
+          console.warn('Could not publish current BPMN XML', err);
+        });
+    }
+
+    function openDiagram(bpmnXML) {
+      var xml = (bpmnXML && bpmnXML.trim()) ? bpmnXML.trim() : null;
+      if (!xml) {
+        xml = '<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" targetNamespace="http://bpmn.io/schema/bpmn" id="Definitions_1"><bpmn:process id="Process_1" isExecutable="true"/><bpmndi:BPMNDiagram id="BPMNDiagram_1"><bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1"/></bpmndi:BPMNDiagram></bpmn:definitions>';
+      }
+      modeler.importXML(xml).then(function() {
+        modeler.get('canvas').zoom('fit-viewport');
+        var eventBus = modeler.get('eventBus');
+        function sendSelection(element) {
+          postToParent({ type: 'bpmnSelectionChanged', element: elementPayload(element) });
+        }
+        eventBus.on('selection.changed', function(event) {
+          var arr = event.newSelection || [];
+          sendSelection(arr[0] || null);
+        });
+        eventBus.on('element.click', function(event) {
+          if (event.element) sendSelection(event.element);
+        });
+        eventBus.on('commandStack.changed', function() {
+          publishCurrentXml();
+        });
+      }).catch(function(err) {
+        console.error('BPMN import error', err);
+      });
+    }
+
+    // Load diagram from URL (like the starter: $.get(diagramUrl, openDiagram, 'text'))
+    fetch(diagramUrl, { method: 'GET', credentials: 'include' })
+      .then(function(r) {
+        if (!r.ok) return Promise.reject(new Error('Diagram URL returned ' + r.status));
+        return r.text();
+      })
+      .then(openDiagram)
+      .catch(function(err) {
+        console.error('Could not load diagram from URL', err);
+        openDiagram(null);
+      });
+
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'getXML') {
+        modeler.saveXML({ format: true })
+          .then(function(result) {
+            if (event.source) event.source.postMessage({ type: 'xml', xml: result.xml }, event.origin || '*');
+          })
+          .catch(function(err) {
+            if (event.source) event.source.postMessage({ type: 'xmlError', error: String(err) }, event.origin || '*');
+          });
+      }
+    });
+  </script>
+</body>
+</html>

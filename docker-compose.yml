@@ -1,0 +1,253 @@
+# RealtyIQ Consolidated Docker Compose Configuration
+# All services: API, UI, Redis Cache, PostgreSQL, pgAdmin
+
+services:
+  # ===== Redis Cache Server (Shared) =====
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - realtyiq-network
+
+  # ===== GSA Auction API Service =====
+  api:
+    container_name: realtyiq-api
+    build:
+      context: ./Api
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./Api/.env
+    develop:
+      watch:
+        - path: ./Api
+          target: /app
+          action: sync+restart
+          ignore:
+            - postgres_data/
+            - "**/__pycache__/"
+            - "**/*.pyc"
+            - ".git/"
+    volumes:
+      - ./Api:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_LOCATION=redis://redis:6379/1  # API uses database 1
+      - REDIS_URL=redis://redis:6379/0       # UI uses database 0
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_started
+      blackbox-exporter:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      grafana:
+        condition: service_healthy
+    networks:
+      - realtyiq-network
+
+  # ===== PostgreSQL Database =====
+  db:
+    container_name: postgres
+    image: postgres:16
+    restart: unless-stopped
+    ports:
+      - "8080:5432"
+    env_file:
+      - ./Api/.env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./Api/postgres_data:/var/lib/postgresql/backup
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - PGDATA=/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - realtyiq-network
+
+  # ===== pgAdmin (Database Management) =====
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    ports:
+      - "5555:80"
+    env_file:
+      - ./Api/.env
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    depends_on:
+      - db
+    networks:
+      - realtyiq-network
+
+  # ===== RealtyIQ UI Service (Optional) =====
+  ui:
+    container_name: realtyiq
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - .:/app
+      - /app/agent_ui/staticfiles
+      - /app/agent_ui/media
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - REDIS_ENABLED=true
+      - API_URL=http://api:8000
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn agent_ui.agent_ui.asgi:application --host 0.0.0.0 --port 8002
+    networks:
+      - realtyiq-network
+
+  # ===== Piper TTS Service =====
+  piper:
+    container_name: piper
+    build:
+      context: ./piper_tts
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./piper_tts/audio:/audio
+    environment:
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - realtyiq-network
+
+  # ===== Blackbox Exporter (Endpoint Monitoring) =====
+  # Monitors HTTP endpoints without requiring code changes
+  blackbox-exporter:
+    container_name: blackbox-exporter
+    image: prom/blackbox-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./prometheus/blackbox.yml:/etc/blackbox_exporter/config.yml
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9115/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - realtyiq-network
+
+  # ===== Prometheus Monitoring (Optional) =====
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.47.2
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=20MB'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      blackbox-exporter:
+        condition: service_healthy
+    networks:
+      - realtyiq-network
+
+  # ===== Grafana Dashboards (Optional) =====
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./prometheus/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./prometheus/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./prometheus/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - realtyiq-network
+
+volumes:
+  redis-data:
+    name: realtyiq-redis-data
+    external: true  # Use existing volume
+  postgres-data:
+    name: realtyiq-postgres-data
+    external: true  # Use existing volume
+  prometheus-data:
+    name: realtyiq-prometheus-data
+    external: true  # Use existing volume
+  grafana-data:
+    name: realtyiq-grafana-data
+
+networks:
+  realtyiq-network:
+    name: realtyiq-network
+    driver: bridge

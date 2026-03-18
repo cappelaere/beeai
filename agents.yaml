@@ -1,0 +1,105 @@
+agents:
+  gres:
+    name: GRES Agent
+    display_name: GRES Agent
+    icon: "\U0001F3E2"
+    description: GSA Real Estate Sales (GRES) Auction assistant for reporting and
+      business intelligence
+    skills_file: agents/gres/SKILLS.md
+    config_module: agents.gres.agent
+    config_name: GRES_AGENT_CONFIG
+    default: false
+  sam:
+    name: SAM.gov Exclusions
+    display_name: SAM.gov
+    icon: "\U0001F6AB"
+    description: Query federal contract exclusions from SAM.gov database
+    skills_file: agents/sam/SKILLS.md
+    config_module: agents.sam.agent
+    config_name: SAM_AGENT_CONFIG
+    default: false
+  ofac:
+    name: OFAC Compliance Agent
+    display_name: OFAC
+    icon: "\U0001F6A8"
+    description: Screen bidders against OFAC SDN list
+    skills_file: agents/ofac/SKILLS.md
+    config_module: agents.ofac.agent
+    config_name: OFAC_AGENT_CONFIG
+    default: false
+  bidder_verification:
+    name: Bidder Verification Agent
+    display_name: Bidder Check
+    icon: "\u2705"
+    description: Orchestrates SAM.gov and OFAC checks for comprehensive bidder eligibility
+      screening
+    skills_file: agents/bidder_verification/SKILLS.md
+    config_module: agents.bidder_verification.agent
+    config_name: BIDDER_VERIFICATION_AGENT_CONFIG
+    default: false
+  idv:
+    name: Identity Verification
+    display_name: Identity
+    icon: "\U0001F510"
+    description: Verify user identity and manage verification records
+    skills_file: agents/idv/SKILLS.md
+    config_module: agents.idv.agent
+    config_name: IDV_AGENT_CONFIG
+    default: false
+  library:
+    name: Library Agent
+    display_name: Library
+    icon: "\U0001F4DA"
+    description: Document library management and semantic search assistant
+    skills_file: agents/library/SKILLS.md
+    config_module: agents.library.agent
+    config_name: LIBRARY_AGENT_CONFIG
+    default: false
+  flo:
+    name: Flo
+    display_name: Flo
+    icon: "\U0001F30A"
+    description: Workflow Management Specialist - helps discover, understand, and
+      execute workflows
+    skills_file: agents/flo/SKILLS.md
+    config_module: agents.flo.agent
+    config_name: FLO_AGENT_CONFIG
+    default: false
+  dap_analyst:
+    name: DAP Analyst Agent
+    display_name: DAP Analyst
+    icon: "\U0001F4C8"
+    description: GSA web analytics assistant for realestatesales.gov and other
+      DAP-participating domains using the Digital Analytics Program API
+    skills_file: agents/dap_analyst/SKILLS.md
+    config_module: agents.dap_analyst.agent
+    config_name: DAP_ANALYST_AGENT_CONFIG
+    default: false
+  bi:
+    name: BI Agent
+    display_name: BI
+    icon: "\U0001F4CA"
+    description: BidHom property performance and metrics assistant for specialists,
+      program managers, and leadership
+    skills_file: agents/bi/SKILLS.md
+    config_module: agents.bi.agent
+    config_name: BI_AGENT_CONFIG
+    default: true
+  research:
+    name: Research Agent
+    display_name: Research
+    icon: "\U0001F50D"
+    description: Web search specialist for real-time information and research
+    skills_file: agents/research/SKILLS.md
+    config_module: agents.research.agent
+    config_name: RESEARCH_AGENT_CONFIG
+    default: false
+  bpmn_expert:
+    name: BPMN Expert
+    display_name: BPMN Expert
+    icon: "\U0001F9ED"
+    description: BPMN workflow design specialist for diagrams, bindings, and BeeAI workflow code
+    skills_file: agents/bpmn_expert/SKILLS.md
+    config_module: agents.bpmn_expert.agent
+    config_name: BPMN_EXPERT_AGENT_CONFIG
+    default: false

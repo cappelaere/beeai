@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block title %}Prometheus Metrics - RealtyIQ Agent{% endblock %}
+{% block content %}
+
+<div class="content-header">
+  <h2>Prometheus Metrics</h2>
+  <p class="text-muted">Real-time application metrics for monitoring and observability</p>
+</div>
+
+<div class="alert alert-info mb-4">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 8px;">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </svg>
+  <strong>Auto-refresh:</strong> This page automatically refreshes every 10 seconds.
+  Prometheus scrape endpoint: <code>/metrics/</code>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h5 class="card-title mb-2">Metrics Overview</h5>
+        <p class="text-muted small mb-0">Last updated: <span id="last-updated">Loading...</span></p>
+      </div>
+      <div>
+        <button id="refresh-btn" class="btn btn-sm btn-outline-primary me-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+          </svg>
+          Refresh Now
+        </button>
+        <button id="toggle-auto-refresh" class="btn btn-sm btn-success">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Auto-refresh: ON
+        </button>
+        <button id="copy-metrics-btn" class="btn btn-sm btn-outline-secondary ms-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy
+        </button>
+      </div>
+    </div>
+    
+    <div class="row mb-3">
+      <div class="col-md-12">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+          </span>
+          <input type="text" id="search-metrics" class="form-control" placeholder="Search metrics (e.g., cpu, memory, agent, cache...)">
+        </div>
+      </div>
+    </div>
+    
+    <div id="metrics-stats" class="row mb-3">
+      <div class="col-md-3 col-6 mb-2">
+        <div class="card bg-light">
+          <div class="card-body p-2 text-center">
+            <small class="text-muted d-block">Total Metrics</small>
+            <strong id="total-metrics">-</strong>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6 mb-2">
+        <div class="card bg-light">
+          <div class="card-body p-2 text-center">
+            <small class="text-muted d-block">Counters</small>
+            <strong id="counter-metrics">-</strong>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6 mb-2">
+        <div class="card bg-light">
+          <div class="card-body p-2 text-center">
+            <small class="text-muted d-block">Gauges</small>
+            <strong id="gauge-metrics">-</strong>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6 mb-2">
+        <div class="card bg-light">
+          <div class="card-body p-2 text-center">
+            <small class="text-muted d-block">Histograms</small>
+            <strong id="histogram-metrics">-</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title mb-3">Metrics Data</h5>
+    
+    <div id="metrics-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 12px; line-height: 1.5; max-height: 600px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">
+      <div class="text-center py-5" style="color: #888;">
+        <div class="spinner-border spinner-border-sm me-2" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        Loading metrics...
+      </div>
+    </div>
+    
+    <div class="mt-3">
+      <small class="text-muted">
+        <strong>Prometheus Endpoint:</strong> 
+        <a href="/metrics/" target="_blank" class="text-decoration-none">/metrics/</a>
+        (Text format for Prometheus scraping)
+      </small>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-body">
+    <h5 class="card-title mb-3">Metric Categories</h5>
+    <div class="row">
+      <div class="col-md-6">
+        <h6 class="text-muted small fw-bold mb-2">Application Metrics</h6>
+        <ul class="small mb-3">
+          <li><code>realtyiq_http_requests_*</code> - HTTP request tracking</li>
+          <li><code>realtyiq_agent_*</code> - Agent execution metrics</li>
+          <li><code>realtyiq_chat_*</code> - Chat session & message metrics</li>
+          <li><code>realtyiq_card_*</code> - Assistant card metrics</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h6 class="text-muted small fw-bold mb-2">Infrastructure Metrics</h6>
+        <ul class="small mb-3">
+          <li><code>realtyiq_database_*</code> - Database operations</li>
+          <li><code>realtyiq_cache_*</code> - Redis cache operations</li>
+          <li><code>realtyiq_system_*</code> - CPU, memory, disk usage</li>
+          <li><code>realtyiq_errors_*</code> - Error tracking</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var autoRefreshEnabled = true;
+  var refreshInterval = null;
+  var allMetricsText = '';
+  
+  // Load metrics on page load
+  loadMetrics();
+  
+  // Start auto-refresh
+  startAutoRefresh();
+  
+  // Manual refresh button
+  document.getElementById('refresh-btn').addEventListener('click', function() {
+    loadMetrics();
+  });
+  
+  // Toggle auto-refresh
+  document.getElementById('toggle-auto-refresh').addEventListener('click', function() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    var btn = this;
+    
+    if (autoRefreshEnabled) {
+      btn.classList.remove('btn-danger');
+      btn.classList.add('btn-success');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><polyline points="20 6 9 17 4 12"/></svg>Auto-refresh: ON';
+      startAutoRefresh();
+    } else {
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-danger');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Auto-refresh: OFF';
+      stopAutoRefresh();
+    }
+  });
+  
+  // Copy metrics button
+  document.getElementById('copy-metrics-btn').addEventListener('click', function() {
+    navigator.clipboard.writeText(allMetricsText).then(function() {
+      var btn = document.getElementById('copy-metrics-btn');
+      var originalText = btn.innerHTML;
+      btn.innerHTML = '✓ Copied!';
+      btn.classList.add('btn-success');
+      btn.classList.remove('btn-outline-secondary');
+      setTimeout(function() {
+        btn.innerHTML = originalText;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-secondary');
+      }, 2000);
+    });
+  });
+  
+  // Search metrics
+  document.getElementById('search-metrics').addEventListener('input', function(e) {
+    var searchTerm = e.target.value.toLowerCase();
+    filterMetrics(searchTerm);
+  });
+  
+  function startAutoRefresh() {
+    if (refreshInterval) return;
+    refreshInterval = setInterval(function() {
+      if (autoRefreshEnabled) {
+        loadMetrics();
+      }
+    }, 10000); // 10 seconds
+  }
+  
+  function stopAutoRefresh() {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+  }
+  
+  function loadMetrics() {
+    fetch('/metrics/')
+      .then(function(response) { return response.text(); })
+      .then(function(data) {
+        allMetricsText = data;
+        displayMetrics(data);
+        updateStats(data);
+        updateTimestamp();
+      })
+      .catch(function(error) {
+        console.error('Error loading metrics:', error);
+        document.getElementById('metrics-content').innerHTML = 
+          '<div style="color: #f48771;">Error loading metrics: ' + error.message + '</div>';
+      });
+  }
+  
+  function displayMetrics(data) {
+    var content = document.getElementById('metrics-content');
+    
+    // Add syntax highlighting
+    var highlighted = data
+      .replace(/^# HELP (.+)/gm, '<span style="color: #6a9955;"># HELP $1</span>')
+      .replace(/^# TYPE (.+)/gm, '<span style="color: #6a9955;"># TYPE $1</span>')
+      .replace(/^(realtyiq_\w+)(\{[^}]*\})?\s+(.+)/gm, function(match, name, labels, value) {
+        var nameColor = '#4ec9b0';
+        var labelColor = '#ce9178';
+        var valueColor = '#b5cea8';
+        
+        var result = '<span style="color: ' + nameColor + ';">' + name + '</span>';
+        if (labels) {
+          result += '<span style="color: ' + labelColor + ';">' + labels + '</span>';
+        }
+        result += ' <span style="color: ' + valueColor + ';">' + value + '</span>';
+        return result;
+      });
+    
+    content.innerHTML = highlighted;
+  }
+  
+  function updateStats(data) {
+    var lines = data.split('\n');
+    var total = 0;
+    var counters = 0;
+    var gauges = 0;
+    var histograms = 0;
+    
+    lines.forEach(function(line) {
+      if (line.startsWith('# TYPE')) {
+        total++;
+        if (line.includes('counter')) counters++;
+        else if (line.includes('gauge')) gauges++;
+        else if (line.includes('histogram')) histograms++;
+      }
+    });
+    
+    document.getElementById('total-metrics').textContent = total;
+    document.getElementById('counter-metrics').textContent = counters;
+    document.getElementById('gauge-metrics').textContent = gauges;
+    document.getElementById('histogram-metrics').textContent = histograms;
+  }
+  
+  function updateTimestamp() {
+    var now = new Date();
+    document.getElementById('last-updated').textContent = now.toLocaleTimeString();
+  }
+  
+  function filterMetrics(searchTerm) {
+    if (!searchTerm) {
+      displayMetrics(allMetricsText);
+      return;
+    }
+    
+    var lines = allMetricsText.split('\n');
+    var filtered = [];
+    var includeNext = false;
+    
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      
+      if (line.toLowerCase().includes(searchTerm)) {
+        // Include HELP and TYPE lines before the matching metric
+        if (i > 0 && lines[i-1].startsWith('# TYPE')) {
+          if (i > 1 && lines[i-2].startsWith('# HELP')) {
+            filtered.push(lines[i-2]);
+          }
+          filtered.push(lines[i-1]);
+        }
+        filtered.push(line);
+        includeNext = true;
+      } else if (includeNext && (line.startsWith('#') || line.trim() === '')) {
+        filtered.push(line);
+        if (line.trim() === '') includeNext = false;
+      } else {
+        includeNext = false;
+      }
+    }
+    
+    displayMetrics(filtered.join('\n'));
+  }
+})();
+</script>
+{% endblock %}

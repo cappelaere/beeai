@@ -1,0 +1,10 @@
+workflow_id: test_workflow
+executor: workflows.test_workflow.workflow.TestWorkflow
+
+serviceTasks:
+  task1:
+    handler: task1
+    description: "First task"
+  task2:
+    handler: task2
+    description: "Second task"

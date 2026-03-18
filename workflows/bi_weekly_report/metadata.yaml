@@ -1,0 +1,24 @@
+category: Compliance
+description: It produces a weekly executive brief for the BidHom property portfolio.
+  The workflow fetches active properties, aggregates metrics (views, brochure/IFB
+  downloads, bidder and subscriber registrations), identifies top performers and properties
+  needing attention, analyzes the conversion funnel and week-over-week trends, and
+  summarizes auction readiness. It then generates recommended actions and a single
+  executive brief (narrative + tables) suitable for leadership.
+documentation_path: workflows/bi_weekly_report/documentation.md
+estimated_duration: 30-60 seconds
+icon: 📊
+id: bi_weekly_report
+input_schema:
+  start_date:
+    help_text: Start of the report period (UTC). Format MM/DD/YYYY, e.g. 03/07/2026. Click the calendar to pick.
+    label: Start date
+    required: true
+    type: date
+  end_date:
+    help_text: End of the report period (UTC). Format MM/DD/YYYY, e.g. 03/20/2026. Click the calendar to pick.
+    label: End date
+    required: true
+    type: date
+name: BI Weekly Report
+workflow_number: 3

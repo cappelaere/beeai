@@ -1,0 +1,17 @@
+category: Compliance
+description: Automates comprehensive property research across multiple sources. Finds
+  comparable sales, searches documents, checks compliance, and reviews auction history—all
+  in parallel. Generates risk assessment and recommendations.
+documentation_path: workflows/property_due_diligence/documentation.md
+estimated_duration: 10-30 seconds
+icon: ⚙️
+id: property_due_diligence
+input_schema:
+  property_id:
+    help_text: Property ID to research and analyze
+    label: Property ID
+    placeholder: e.g., 12345
+    required: true
+    type: integer
+name: Property Due Diligence
+workflow_number: 2

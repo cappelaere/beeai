@@ -1,0 +1,61 @@
+id: bidder_onboarding
+name: Bidder Onboarding & Verification
+description: Automates bidder registration with SAM.gov and OFAC compliance screening. Screens against 138K exclusions and 18K SDN records, then applies auto-approval logic.
+icon: ⚙️
+workflow_number: 1
+documentation_path: workflows/bidder_onboarding/documentation.md
+category: Compliance
+estimated_duration: < 5 seconds
+
+input_schema:
+  bidder_name:
+    type: string
+    required: true
+    label: Bidder Name
+    help_text: Full legal name of the bidder to screen
+    placeholder: e.g., John Smith or ABC Corporation
+  
+  property_id:
+    type: integer
+    required: true
+    label: Property ID
+    help_text: Property ID for the registration
+    placeholder: e.g., 12345
+  
+  email:
+    type: email
+    required: false
+    label: Email Address
+    help_text: Bidder's email address
+    placeholder: user@example.com
+  
+  phone:
+    type: string
+    required: false
+    label: Phone Number
+    help_text: Contact phone number
+    placeholder: 555-1234
+  
+  user_type:
+    type: select
+    required: false
+    label: User Type
+    help_text: Type of bidder
+    options:
+      - Investor
+      - Agent
+      - Individual
+      - Corporation
+    default: Investor
+  
+  terms_accepted:
+    type: checkbox
+    required: false
+    label: Terms and Conditions Accepted
+    default: true
+  
+  age_accepted:
+    type: checkbox
+    required: false
+    label: Age Verification Accepted
+    default: true

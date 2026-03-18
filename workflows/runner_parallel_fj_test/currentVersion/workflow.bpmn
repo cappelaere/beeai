@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  id="Definitions_PFJ" targetNamespace="http://example.com/pfj">
+  <bpmn:process id="Process_PFJ" isExecutable="true">
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:outgoing>s0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="s0" sourceRef="start" targetRef="task0" />
+    <bpmn:serviceTask id="task0" name="Task 0">
+      <bpmn:incoming>s0</bpmn:incoming>
+      <bpmn:outgoing>t0</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="t0" sourceRef="task0" targetRef="forkGW" />
+    <bpmn:parallelGateway id="forkGW" name="Fork">
+      <bpmn:incoming>t0</bpmn:incoming>
+      <bpmn:outgoing>ffa</bpmn:outgoing>
+      <bpmn:outgoing>ffb</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="ffa" sourceRef="forkGW" targetRef="taskA" />
+    <bpmn:sequenceFlow id="ffb" sourceRef="forkGW" targetRef="taskB" />
+    <bpmn:serviceTask id="taskA" name="Task A">
+      <bpmn:incoming>ffa</bpmn:incoming>
+      <bpmn:outgoing>ja</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="taskB" name="Task B">
+      <bpmn:incoming>ffb</bpmn:incoming>
+      <bpmn:outgoing>jb</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="ja" sourceRef="taskA" targetRef="joinGW" />
+    <bpmn:sequenceFlow id="jb" sourceRef="taskB" targetRef="joinGW" />
+    <bpmn:parallelGateway id="joinGW" name="Join">
+      <bpmn:incoming>ja</bpmn:incoming>
+      <bpmn:incoming>jb</bpmn:incoming>
+      <bpmn:outgoing>jc</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="jc" sourceRef="joinGW" targetRef="taskAfter" />
+    <bpmn:serviceTask id="taskAfter" name="Task After">
+      <bpmn:incoming>jc</bpmn:incoming>
+      <bpmn:outgoing>jd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="jd" sourceRef="taskAfter" targetRef="end" />
+    <bpmn:endEvent id="end" name="End">
+      <bpmn:incoming>jd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

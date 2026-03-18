@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Card Collection - RealtyIQ Agent{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Card Collection</h1>
+        <a href="{% url 'card_create' %}" class="btn btn-primary">Create New Card</a>
+    </div>
+    
+    <!-- Filter Controls -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="filter-name" class="form-label">Search by Name</label>
+                    <input type="text" id="filter-name" class="form-control" placeholder="Type to filter by card name...">
+                </div>
+                <div class="col-md-4">
+                    <label for="filter-agent" class="form-label">Filter by Agent</label>
+                    <select id="filter-agent" class="form-select">
+                        <option value="">All Agents</option>
+                        {% for agent in AVAILABLE_AGENTS %}
+                        <option value="{{ agent.id }}">{{ agent.icon }} {{ agent.name }}</option>
+                        {% endfor %}
+                        <option value="all">📋 All Agents</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button id="clear-filters" class="btn btn-outline-secondary w-100">Clear Filters</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Cards Table -->
+    <div class="table-responsive">
+        <table class="table table-hover cards-table">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 60px;">Favorite</th>
+                    <th style="width: 25%;">Name</th>
+                    <th style="width: 15%;">Agent</th>
+                    <th style="width: 40%;">Description</th>
+                    <th style="width: 150px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="cards-tbody">
+                {% for card in cards %}
+                <tr data-card-id="{{ card.pk }}" data-card-name="{{ card.name|lower }}" data-agent-type="{{ card.agent_type }}">
+                    <td class="fav-cell text-center">
+                        <button type="button" class="fav-toggle {% if card.is_favorite %}is-favorite{% endif %}" data-id="{{ card.pk }}" data-fav="{{ card.is_favorite|yesno:'1,0' }}" aria-label="{% if card.is_favorite %}Remove {{ card.name }} from favorites{% else %}Add {{ card.name }} to favorites{% endif %}" title="{% if card.is_favorite %}Remove from favorites{% else %}Add to favorites{% endif %}">★</button>
+                    </td>
+                    <td class="fw-bold">{{ card.name }}</td>
+                    <td>
+                        {% if card.agent_type == 'gres' %}
+                            <span class="badge bg-primary">🏢 GRES</span>
+                        {% elif card.agent_type == 'sam' %}
+                            <span class="badge bg-warning text-dark">🚫 SAM.gov</span>
+                        {% elif card.agent_type == 'all' %}
+                            <span class="badge bg-secondary">📋 All</span>
+                        {% else %}
+                            <span class="badge bg-info">{{ card.agent_type|upper }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted">{{ card.description|truncatewords:20 }}</td>
+                    <td>
+                        <a href="{% url 'card_edit' card.pk %}" class="btn btn-sm btn-outline-primary me-1">Edit</a>
+                        <form method="post" action="{% url 'card_delete' card.pk %}" style="display:inline;" onsubmit="return confirm('Delete this card?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr id="no-cards-row">
+                    <td colspan="5" class="text-center text-muted py-4">No cards found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div id="no-results" class="alert alert-info mt-3" style="display: none;">
+        No cards match the current filters. Try adjusting your search criteria.
+    </div>
+</div>
+
+<script>window.CSRF_TOKEN = "{{ csrf_token }}";</script>
+<script src="{% static 'js/cards.js' %}"></script>
+<script>
+// Add filtering functionality
+(function() {
+    var filterName = document.getElementById('filter-name');
+    var filterAgent = document.getElementById('filter-agent');
+    var clearBtn = document.getElementById('clear-filters');
+    var tbody = document.getElementById('cards-tbody');
+    var noResults = document.getElementById('no-results');
+    
+    function applyFilters() {
+        var nameQuery = filterName.value.toLowerCase().trim();
+        var agentQuery = filterAgent.value.toLowerCase().trim();
+        var rows = tbody.querySelectorAll('tr[data-card-id]');
+        var visibleCount = 0;
+        
+        rows.forEach(function(row) {
+            var cardName = row.getAttribute('data-card-name') || '';
+            var agentType = row.getAttribute('data-agent-type') || '';
+            
+            var nameMatch = !nameQuery || cardName.indexOf(nameQuery) !== -1;
+            var agentMatch = !agentQuery || agentType === agentQuery;
+            
+            if (nameMatch && agentMatch) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Show/hide no results message
+        if (visibleCount === 0 && rows.length > 0) {
+            noResults.style.display = 'block';
+        } else {
+            noResults.style.display = 'none';
+        }
+    }
+    
+    function clearFilters() {
+        filterName.value = '';
+        filterAgent.value = '';
+        applyFilters();
+    }
+    
+    if (filterName) filterName.addEventListener('input', applyFilters);
+    if (filterAgent) filterAgent.addEventListener('change', applyFilters);
+    if (clearBtn) clearBtn.addEventListener('click', clearFilters);
+})();
+</script>
+{% endblock %}

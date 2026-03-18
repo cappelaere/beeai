@@ -1,0 +1,796 @@
+/**
+ * Workflows UI Stylesheet
+ * 
+ * Comprehensive styles for the workflows list and execution pages.
+ */
+
+/* ===== Workflow List Page ===== */
+
+.workflows-container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.page-header h1 i {
+    color: #2196f3;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.workflows-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.workflow-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.workflow-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    line-height: 1;
+}
+
+.workflow-card h3 {
+    font-size: 1.25rem;
+    margin: 0 0 0.75rem 0;
+    color: #1a1a1a;
+}
+
+.workflow-description {
+    color: #555;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    flex-grow: 1;
+}
+
+.workflow-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.badge-compliance {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.badge-automation {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.badge-analysis {
+    background: #e8f5e9;
+    color: #388e3c;
+}
+
+.duration {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    transition: background-color 0.2s;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.btn-primary {
+    background: #2196f3;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1976d2;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #666;
+}
+
+.empty-state svg {
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.empty-state h2 {
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+/* ===== Workflow Detail Page ===== */
+
+.workflow-detail-container {
+    padding: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.workflow-header {
+    margin-bottom: 2rem;
+}
+
+.breadcrumb {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+}
+
+.breadcrumb a {
+    color: #2196f3;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-separator {
+    color: #999;
+    user-select: none;
+    padding: 0 0.2rem;
+}
+
+.breadcrumb-current {
+    color: #1a1a1a;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.workflow-header h1 {
+    font-size: 2rem;
+    margin: 0.5rem 0;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.workflow-header .description {
+    color: #555;
+    font-size: 1.1rem;
+    margin: 0.5rem 0;
+}
+
+.workflow-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.workflow-layout {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.input-panel, .diagram-panel {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.input-panel h2, .diagram-panel h2 {
+    font-size: 1.25rem;
+    margin: 0 0 1rem 0;
+    color: #1a1a1a;
+}
+
+/* ===== Form Styles ===== */
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.required {
+    color: #d32f2f;
+    margin-left: 0.25rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #2196f3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.help-text {
+    display: block;
+    margin-top: 0.25rem;
+    color: #666;
+    font-size: 0.875rem;
+}
+
+.btn-large {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+}
+
+.btn-secondary {
+    background: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+    display: inline-block;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: #e0e0e0;
+    border-color: #ccc;
+}
+
+/* Checkbox Styling */
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.form-checkbox {
+    width: 1.25rem;
+    height: 1.25rem;
+    cursor: pointer;
+    accent-color: #2196f3;
+}
+
+.checkbox-wrapper label {
+    margin: 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ===== Status Badge ===== */
+
+.diagram-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.status-ready { 
+    background: #e3f2fd; 
+    color: #1976d2; 
+}
+
+.status-running { 
+    background: #fff3e0; 
+    color: #f57c00;
+    animation: statusPulse 2s ease-in-out infinite;
+}
+
+.status-complete { 
+    background: #e8f5e9; 
+    color: #388e3c; 
+}
+
+.status-error { 
+    background: #ffebee; 
+    color: #d32f2f; 
+}
+
+.status-waiting { 
+    background: #fff3e0; 
+    color: #f57c00;
+    animation: statusPulse 2s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { 
+        opacity: 1; 
+    }
+    50% { 
+        opacity: 0.7; 
+    }
+}
+
+/* ===== Diagram Container ===== */
+
+.mermaid-container {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 1rem;
+    background: #fafafa;
+    overflow-x: auto;
+    min-height: 300px;
+}
+
+.mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ===== Progress Steps ===== */
+
+.progress-steps {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.progress-steps h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+#steps-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.step-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid #f0f0f0;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.step-item i {
+    color: #4caf50;
+    flex-shrink: 0;
+}
+
+.step-item span {
+    flex-grow: 1;
+    color: #333;
+}
+
+.step-item small {
+    color: #999;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+/* ===== Results Panel ===== */
+
+.results-panel {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e0e0e0;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.results-panel h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+#results-content {
+    margin-bottom: 1rem;
+}
+
+.result-summary {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.result-summary.approved {
+    background: #e8f5e9;
+    border-left: 4px solid #4caf50;
+}
+
+.result-summary.denied {
+    background: #ffebee;
+    border-left: 4px solid #f44336;
+}
+
+.result-summary.pending, .result-summary.review {
+    background: #fff3e0;
+    border-left: 4px solid #ff9800;
+}
+
+.result-summary h4 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.result-summary p {
+    margin: 0;
+    color: #555;
+}
+
+.eligibility-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.eligibility-badge.approved {
+    background: #4caf50;
+    color: white;
+}
+
+.eligibility-badge.denied {
+    background: #f44336;
+    color: white;
+}
+
+.risk-factors, .checks-performed {
+    margin-bottom: 1rem;
+}
+
+.risk-factors h4, .checks-performed h4 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.risk-factors ul, .checks-performed ul {
+    margin: 0;
+    padding-left: 1.5rem;
+}
+
+.risk-factors li, .checks-performed li {
+    margin-bottom: 0.25rem;
+    color: #555;
+}
+
+details {
+    margin-top: 1rem;
+}
+
+details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #2196f3;
+    padding: 0.5rem;
+    user-select: none;
+}
+
+details summary:hover {
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.result-json {
+    background: #f5f5f5;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    font-family: 'Courier New', monospace;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 0.5rem;
+}
+
+/* ===== BI Weekly Report results (HTML/tables) ===== */
+.bi-weekly-report-results {
+    margin-top: 0.5rem;
+}
+.bi-weekly-report-results .bi-section {
+    margin-bottom: 1.5rem;
+}
+.bi-weekly-report-results .bi-section h2 {
+    font-size: 1.1rem;
+    color: #1565c0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 0.25rem;
+}
+.bi-weekly-report-results .bi-brief-html h1,
+.bi-weekly-report-results .bi-brief-html h2,
+.bi-weekly-report-results .bi-brief-html h3 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.35rem;
+}
+.bi-weekly-report-results .bi-brief-html p,
+.bi-weekly-report-results .bi-brief-html ul {
+    margin: 0.5rem 0;
+}
+
+/* Markdown content in default result table (when workflow-specific template not used) */
+.result-table .bi-brief-html h1, .result-table .bi-brief-html h2, .result-table .bi-brief-html h3 {
+    margin: 0.75rem 0 0.35rem;
+    font-size: 1rem;
+}
+.result-table .bi-brief-html p, .result-table .bi-brief-html ul {
+    margin: 0.5rem 0;
+}
+.result-table .bi-brief-html ul {
+    padding-left: 1.5rem;
+}
+
+/* Markdown content in result tables (default template, exports) */
+.bi-brief-html h1, .bi-brief-html h2, .bi-brief-html h3 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.35rem;
+    font-size: 1rem;
+}
+.bi-brief-html h1 { font-size: 1.25rem; }
+.bi-brief-html h2 { font-size: 1.1rem; color: #1565c0; }
+.bi-brief-html p, .bi-brief-html ul {
+    margin: 0.5rem 0;
+}
+.bi-brief-html ul { padding-left: 1.5rem; }
+.bi-weekly-report-results .bi-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin: 0.5rem 0;
+}
+.bi-weekly-report-results .bi-table th,
+.bi-weekly-report-results .bi-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border: 1px solid #e0e0e0;
+}
+.bi-weekly-report-results .bi-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+.bi-weekly-report-results .bi-actions {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+.bi-weekly-report-results .bi-actions li {
+    margin: 0.25rem 0;
+}
+
+/* Markdown content in default result table (e.g. executive_brief_markdown) */
+.result-table .bi-brief-html h1,
+.result-table .bi-brief-html h2,
+.result-table .bi-brief-html h3 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.35rem;
+    font-size: 1rem;
+}
+.result-table .bi-brief-html h1 { font-size: 1.2rem; }
+.result-table .bi-brief-html h2 { font-size: 1.1rem; color: #1565c0; }
+.result-table .bi-brief-html p,
+.result-table .bi-brief-html ul {
+    margin: 0.5rem 0;
+}
+.result-table .bi-brief-html ul {
+    padding-left: 1.5rem;
+}
+
+/* ===== Responsive Design ===== */
+
+@media (max-width: 1200px) {
+    .workflow-layout {
+        grid-template-columns: 350px 1fr;
+    }
+}
+
+@media (max-width: 1024px) {
+    .workflow-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .input-panel {
+        order: 1;
+    }
+    
+    .diagram-panel {
+        order: 2;
+    }
+}
+
+@media (max-width: 768px) {
+    .workflows-container {
+        padding: 1rem;
+    }
+    
+    .workflow-detail-container {
+        padding: 1rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .workflow-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .workflows-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .workflow-layout {
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .workflow-card {
+        padding: 1rem;
+    }
+    
+    .workflow-icon {
+        font-size: 2rem;
+    }
+    
+    .input-panel, .diagram-panel {
+        padding: 1rem;
+    }
+}
+
+/* ===== Print Styles ===== */
+
+@media print {
+    .input-panel {
+        display: none;
+    }
+    
+    .workflow-header-meta,
+    .breadcrumb,
+    #export-btn,
+    #execute-btn {
+        display: none;
+    }
+    
+    .diagram-panel {
+        border: none;
+        box-shadow: none;
+    }
+}
+
+/* ===== Accessibility ===== */
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Focus styles for keyboard navigation */
+.btn:focus,
+.form-control:focus,
+details summary:focus {
+    outline: 2px solid #2196f3;
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .workflow-card {
+        border-width: 2px;
+    }
+    
+    .btn-primary {
+        border: 2px solid #1976d2;
+    }
+    
+    .status-badge {
+        border: 2px solid currentColor;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

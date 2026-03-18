@@ -1,0 +1,24 @@
+# RealtyIQ Project Shell Configuration
+# Add this to your ~/.bashrc or ~/.zshrc:
+#   source /path/to/beeai/.shellrc
+
+# Auto-run dev-setup when entering project directory
+BEEAI_PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Only run setup once per shell session
+if [ -z "$BEEAI_ENV_LOADED" ]; then
+    export BEEAI_ENV_LOADED=1
+    
+    # Run setup script
+    if [ -f "$BEEAI_PROJECT_DIR/dev-setup.sh" ]; then
+        source "$BEEAI_PROJECT_DIR/dev-setup.sh"
+    fi
+fi
+
+# Useful aliases
+alias beeai-dev='make dev'
+alias beeai-docker='make docker-up'
+alias beeai-redis='make redis-start'
+alias beeai-test='make test'
+alias beeai-logs='make docker-logs'
+alias beeai-status='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'

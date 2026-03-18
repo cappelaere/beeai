@@ -1,0 +1,101 @@
+<!-- Review Form Template -->
+<div class="task-form-container">
+    <h3>Review & Rating</h3>
+    
+    <form id="review-form" class="task-form">
+        {% csrf_token %}
+        
+        <!-- Rating -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Rating <span style="color: #f44336;">*</span>
+            </label>
+            <div class="star-rating" style="display: flex; gap: 0.5rem;">
+                <input type="radio" name="rating" value="1" id="rating1" required style="display: none;">
+                <label for="rating1" class="star" style="cursor: pointer; font-size: 2rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="rating" value="2" id="rating2" required style="display: none;">
+                <label for="rating2" class="star" style="cursor: pointer; font-size: 2rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="rating" value="3" id="rating3" required style="display: none;">
+                <label for="rating3" class="star" style="cursor: pointer; font-size: 2rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="rating" value="4" id="rating4" required style="display: none;">
+                <label for="rating4" class="star" style="cursor: pointer; font-size: 2rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="rating" value="5" id="rating5" required style="display: none;">
+                <label for="rating5" class="star" style="cursor: pointer; font-size: 2rem; color: #ddd;">★</label>
+            </div>
+        </div>
+        
+        <!-- Feedback -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label for="feedback" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Feedback <span style="color: #f44336;">*</span>
+            </label>
+            <textarea 
+                id="feedback" 
+                name="feedback" 
+                rows="6" 
+                required
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.95rem;"
+                placeholder="Provide your detailed feedback..."
+            ></textarea>
+        </div>
+        
+        <!-- Recommendations (from input_data if provided) -->
+        {% if task.input_data.recommendation_options %}
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Recommendations
+            </label>
+            {% for option in task.input_data.recommendation_options %}
+            <label style="display: block; margin-bottom: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="recommendations" value="{{ option }}" style="margin-right: 0.5rem;">
+                {{ option }}
+            </label>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Star rating functionality
+    const stars = document.querySelectorAll('.star');
+    const starInputs = document.querySelectorAll('input[name="rating"]');
+    
+    stars.forEach((star, index) => {
+        star.addEventListener('click', function() {
+            starInputs[index].checked = true;
+            updateStars(index);
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            updateStars(index);
+        });
+    });
+    
+    function updateStars(upToIndex) {
+        stars.forEach((s, i) => {
+            if (i <= upToIndex) {
+                s.style.color = '#ffc107';
+            } else {
+                s.style.color = '#ddd';
+            }
+        });
+    }
+    
+    // Reset stars on mouse leave
+    const ratingContainer = document.querySelector('.star-rating');
+    ratingContainer.addEventListener('mouseleave', function() {
+        const checkedIndex = Array.from(starInputs).findIndex(input => input.checked);
+        if (checkedIndex >= 0) {
+            updateStars(checkedIndex);
+        } else {
+            stars.forEach(s => s.style.color = '#ddd');
+        }
+    });
+});
+</script>

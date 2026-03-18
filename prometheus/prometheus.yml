@@ -1,0 +1,94 @@
+# Prometheus Configuration for RealtyIQ Monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'realtyiq-monitor'
+
+# No out_of_order_time_window: can trigger "too old sample" bugs in some versions. honor_timestamps: false on jobs uses scrape time.
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    honor_timestamps: false  # use scrape time; avoids "too old sample" when targets expose timestamps
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Blackbox monitoring - Monitor HTTP endpoints without code changes
+  - job_name: 'blackbox-http'
+    honor_timestamps: false
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://api:8000/healthz  # Api health check (admin is disabled)
+          - http://piper:8088/healthz     # Piper health check
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # OPTIONAL: RealtyIQ API Application Metrics
+  # Only needed if you want detailed app metrics (requires django-prometheus in the Api).
+  # Uncomment after installing django-prometheus in the Api to avoid 404 on /metrics.
+  # - job_name: 'realtyiq-api-detailed'
+  #   honor_timestamps: false
+  #   metrics_path: '/metrics'
+  #   static_configs:
+  #     - targets: ['api:8000']
+  #       labels:
+  #         service: 'api'
+  #         environment: 'development'
+
+  # Redis Monitoring (requires redis_exporter)
+  # Uncomment and add redis_exporter service to docker-compose.yml
+  - job_name: 'redis'
+    honor_timestamps: false
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+
+  # PostgreSQL Monitoring (requires postgres_exporter)
+  # Uncomment and add postgres_exporter service to docker-compose.yml
+  # - job_name: 'postgresql'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'postgresql'
+
+  # Piper TTS Service (if it exposes metrics)
+  # - job_name: 'piper'
+  #   metrics_path: '/metrics'
+  #   static_configs:
+  #     - targets: ['piper:8088']
+  #       labels:
+  #         service: 'piper'
+
+  # RealtyIQ app/infra metrics - 15s (HTTP, system, DB, cache, etc.)
+  - job_name: 'realtyiq-app'
+    honor_timestamps: false
+    scrape_interval: 15s
+    metrics_path: /metrics/
+    static_configs:
+      - targets: ['ui:8002']
+        labels:
+          service: 'realtyiq'
+          usage: 'app'
+
+  # Property metrics (BI) - 5m scrape, separate URL to avoid heavy Api calls at 15s
+  - job_name: 'realtyiq-property-metrics'
+    honor_timestamps: false
+    scrape_interval: 5m
+    scrape_timeout: 30s
+    metrics_path: /metrics/bi/
+    static_configs:
+      - targets: ['ui:8002']
+        labels:
+          service: 'realtyiq'
+          usage: 'bi'

@@ -1,0 +1,12 @@
+# Provision RealtyIQ dashboards from the mounted folder.
+apiVersion: 1
+providers:
+  - name: 'RealtyIQ'
+    orgId: 1
+    folder: 'RealtyIQ'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

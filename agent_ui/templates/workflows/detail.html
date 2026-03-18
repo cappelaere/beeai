@@ -1,0 +1,948 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ workflow.name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}?v=2.1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="workflow-detail-container">
+    <!-- Header -->
+    <div class="workflow-header">
+        <div class="breadcrumb" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 0.5rem;">
+            <a href="{% url 'workflows_list' %}" style="color: #2196f3; text-decoration: none;">Workflows</a>
+            <span style="color: #999;">/</span>
+            <span style="color: #1a1a1a; font-weight: 500;">{{ workflow.name }}</span>
+        </div>
+        <div class="workflow-title-row">
+            <div class="workflow-number-large">#{{ workflow.workflow_number }}</div>
+            <div class="workflow-title-content">
+                <h1><span aria-hidden="true">{{ workflow.icon }}</span> {{ workflow.name }}</h1>
+                <p class="description">{{ workflow.description }}</p>
+            </div>
+        </div>
+        <div class="workflow-header-actions">
+            <a href="{% url 'workflow_user_story' workflow.id %}" class="btn btn-sm btn-outline-primary rounded-pill" title="View user story with business value and requirements">
+                <i class="fas fa-bookmark" aria-hidden="true"></i> User Story
+            </a>
+            {% if workflow.documentation_path %}
+            <a href="{% url 'workflow_documentation' workflow.id %}" class="btn btn-sm btn-outline-primary rounded-pill" title="View detailed documentation">
+                <i class="fas fa-info-circle" aria-hidden="true"></i> Documentation
+            </a>
+            {% endif %}
+            <a href="{% url 'chat' %}?agent=bpmn_expert" class="btn btn-sm btn-outline-secondary rounded-pill" title="Open the BPMN Expert in chat">
+                <i class="fas fa-compass" aria-hidden="true"></i> BPMN Expert
+            </a>
+            {% if user_role == "admin" %}
+            <a href="{% url 'workflow_versions' workflow.id %}" class="btn btn-sm btn-outline-secondary rounded-pill" title="View version history">
+                <i class="fas fa-history" aria-hidden="true"></i> Versions
+            </a>
+            <a href="{% url 'workflow_edit' workflow.id %}" class="btn btn-sm btn-primary rounded-pill" title="Edit workflow (metadata, diagram, docs)">
+                <i class="fas fa-edit" aria-hidden="true"></i> Edit workflow
+            </a>
+            {% endif %}
+        </div>
+        <div class="workflow-header-meta">
+            <span class="badge badge-{{ workflow.category|lower }}">{{ workflow.category }}</span>
+            <span class="duration" aria-label="Estimated duration">⏱ {{ workflow.estimated_duration }}</span>
+        </div>
+    </div>
+
+    <hr class="workflow-header-divider">
+
+    <div class="workflow-layout">
+        <!-- Left Panel: Input Form -->
+        <div class="input-panel">
+            <h2>Workflow Inputs</h2>
+            <form id="workflow-form">
+                {% csrf_token %}
+                {% for field_name, field_config in workflow.input_schema.items %}
+                <div class="form-group">
+                    {% if field_config.type == 'checkbox' %}
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" 
+                               id="{{ field_name }}" 
+                               name="{{ field_name }}"
+                               value="true"
+                               {% if field_config.default %}checked{% endif %}
+                               {% if field_config.required %}required{% endif %}
+                               class="form-checkbox">
+                        <label for="{{ field_name }}">
+                            {{ field_config.label }}
+                            {% if field_config.required %}<span class="required" aria-label="required">*</span>{% endif %}
+                        </label>
+                    </div>
+                    {% else %}
+                    <label for="{{ field_name }}">
+                        {{ field_config.label }}
+                        {% if field_config.required %}<span class="required" aria-label="required">*</span>{% endif %}
+                    </label>
+                    
+                    {% if field_config.type == 'string' %}
+                    <input type="text" 
+                           id="{{ field_name }}" 
+                           name="{{ field_name }}"
+                           placeholder="{{ field_config.placeholder|default:'' }}"
+                           {% if field_config.required %}required{% endif %}
+                           class="form-control">
+                    
+                    {% elif field_config.type == 'email' %}
+                    <input type="email" 
+                           id="{{ field_name }}" 
+                           name="{{ field_name }}"
+                           placeholder="{{ field_config.placeholder|default:'' }}"
+                           {% if field_config.required %}required{% endif %}
+                           class="form-control">
+                    
+                    {% elif field_config.type == 'integer' %}
+                    <input type="number" 
+                           id="{{ field_name }}" 
+                           name="{{ field_name }}"
+                           placeholder="{{ field_config.placeholder|default:'' }}"
+                           {% if field_config.required %}required{% endif %}
+                           class="form-control">
+                    
+                    {% elif field_config.type == 'date' %}
+                    <div class="input-group date-input-group">
+                        <input type="text" 
+                               id="{{ field_name }}" 
+                               name="{{ field_name }}"
+                               placeholder="MM/DD/YYYY"
+                               {% if field_config.required %}required{% endif %}
+                               class="form-control flatpickr-date"
+                               data-date-format="m/d/Y"
+                               autocomplete="off">
+                        <button type="button" class="btn btn-outline-secondary date-picker-trigger" aria-label="Open calendar" title="Pick date">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        </button>
+                    </div>
+                    
+                    {% elif field_config.type == 'select' %}
+                    <select id="{{ field_name }}" 
+                            name="{{ field_name }}"
+                            {% if field_config.required %}required{% endif %}
+                            class="form-control">
+                        {% for option in field_config.options %}
+                        <option value="{{ option }}" {% if option == field_config.default %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    
+                    {% elif field_config.type == 'object' %}
+                    <textarea id="{{ field_name }}" 
+                              name="{{ field_name }}"
+                              rows="4"
+                              placeholder="{{ field_config.placeholder|default:'JSON object' }}"
+                              {% if field_config.required %}required{% endif %}
+                              class="form-control"></textarea>
+                    {% endif %}
+                    {% endif %}
+                    
+                    {% if field_config.help_text %}
+                    <small class="help-text">{{ field_config.help_text }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                
+                <div class="workflow-action-buttons">
+                    <button type="submit" class="btn btn-primary btn-large" id="execute-btn">
+                        <i class="fas fa-play" aria-hidden="true"></i> Execute Workflow
+                    </button>
+                    <a href="{% url 'schedule_new' %}?workflow_id={{ workflow.id }}" class="btn btn-secondary btn-large" id="schedule-link">
+                        <i class="fas fa-clock" aria-hidden="true"></i> Schedule
+                    </a>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Right Panel: Live Diagram & Results -->
+        <div class="diagram-panel">
+            {% if latest_run_failure %}
+            <div class="alert alert-warning" style="margin-bottom: 1rem; font-size: 0.9rem;">
+                <strong>Last run failed:</strong>
+                {% if latest_run_failure.failure_reason %} {{ latest_run_failure.failure_reason }}{% endif %}
+                {% if latest_run_failure.failed_node_id %} at <code>{{ latest_run_failure.failed_node_id }}</code>{% endif %}
+            </div>
+            {% endif %}
+            <div class="diagram-header">
+                <h2>Workflow Progress</h2>
+                <div id="status-badge" class="status-badge status-ready" role="status" aria-live="polite">Ready</div>
+            </div>
+            
+            <!-- BPMN Diagram Container -->
+            {% if workflow.diagram_bpmn_xml %}
+            <script type="text/plain" id="bpmn-xml-data">{{ workflow.diagram_bpmn_xml|safe }}</script>
+            {{ progress_node_ids|json_script:"progress-node-ids" }}
+            <div id="workflow-diagram" class="bpmn-container diagram-large" style="border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+            <p class="text-muted small mb-0 mt-1">Green = completed, orange = active node(s).</p>
+            {% if user_role == "admin" %}
+            <p class="mt-2 mb-0 text-muted small">To edit the diagram, use <a href="{% url 'workflow_edit' workflow.id %}">Edit workflow</a> above.</p>
+            {% endif %}
+            {% else %}
+            <div id="workflow-diagram" class="border rounded p-4 bg-light text-muted">
+                <p class="mb-0">No BPMN diagram. Add <code>workflow.bpmn</code> in <code>currentVersion/</code> or edit via <a href="{% url 'workflow_edit' workflow.id %}">Edit workflow</a>.</p>
+            </div>
+            {% endif %}
+            
+            <!-- Progress Steps -->
+            <div id="progress-steps" class="progress-steps" style="display: none;">
+                <h3>Execution Steps</h3>
+                <div id="steps-list" role="log" aria-live="polite" aria-atomic="false"></div>
+            </div>
+            
+            <!-- Results -->
+            <div id="results-panel" class="results-panel" style="display: none;">
+                <h3>Results</h3>
+                <div id="results-content"></div>
+                <button id="export-btn" class="btn btn-secondary">
+                    <i class="fas fa-download" aria-hidden="true"></i> Export Results
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if workflow.diagram_bpmn_xml %}
+<!-- BPMN.js viewer - same version (18.13.1) as diagram editor -->
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.13.1/dist/assets/bpmn-js.css">
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.13.1/dist/assets/diagram-js.css">
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@18.13.1/dist/assets/bpmn-font/css/bpmn.css">
+<script src="https://unpkg.com/bpmn-js@18.13.1/dist/bpmn-navigated-viewer.production.min.js"></script>
+<script>
+(function() {
+    window.applyBpmnProgress = function(completedNodeIds, currentNodeIds, failedNodeId) {
+        var viewer = window.__bpmnViewer;
+        if (!viewer) return;
+        var canvas = viewer.get('canvas');
+        var elementRegistry = viewer.get('elementRegistry');
+        var markers = ['bpmn-completed', 'bpmn-current', 'bpmn-failed', 'bpmn-flow-completed'];
+        elementRegistry.forEach(function(element) {
+            markers.forEach(function(m) { try { canvas.removeMarker(element.id, m); } catch (e) {} });
+        });
+        (completedNodeIds || []).forEach(function(id) {
+            if (elementRegistry.get(id)) canvas.addMarker(id, 'bpmn-completed');
+        });
+        (currentNodeIds || []).forEach(function(id) {
+            if (elementRegistry.get(id)) canvas.addMarker(id, 'bpmn-current');
+        });
+        if (failedNodeId && elementRegistry.get(failedNodeId)) canvas.addMarker(failedNodeId, 'bpmn-failed');
+        var completedSet = {};
+        (completedNodeIds || []).forEach(function(id) { completedSet[id] = true; });
+        elementRegistry.forEach(function(element) {
+            if (element.type !== 'bpmn:SequenceFlow' || !element.source) return;
+            var sourceInCompleted = element.source && completedSet[element.source.id];
+            var sourceIsGateway = element.source && (element.source.type === 'bpmn:ExclusiveGateway' || element.source.type === 'bpmn:ParallelGateway' || element.source.type === 'bpmn:InclusiveGateway');
+            var targetInCompleted = element.target && completedSet[element.target.id];
+            if (sourceInCompleted || (sourceIsGateway && targetInCompleted)) {
+                canvas.addMarker(element.id, 'bpmn-flow-completed');
+            }
+        });
+    };
+    window.applyBpmnProgressFromRun = function(result) {
+        var steps = (result && result.workflow_steps) ? result.workflow_steps : [];
+        window.applyBpmnProgress(steps, [], null);
+    };
+    function initViewer() {
+        var el = document.getElementById('bpmn-xml-data');
+        var bpmnXml = el ? el.textContent : '';
+        var container = document.getElementById('workflow-diagram');
+        if (!container || !bpmnXml.trim()) return;
+        var completedNodeIds = [];
+        var currentNodeIds = [];
+        var failedNodeId = null;
+        var progressEl = document.getElementById('progress-node-ids');
+        if (progressEl && progressEl.textContent) {
+            try {
+                var progress = JSON.parse(progressEl.textContent);
+                completedNodeIds = progress.completed_node_ids || [];
+                currentNodeIds = progress.current_node_ids || [];
+                failedNodeId = progress.failed_node_id || null;
+            } catch (e) { console.warn('BPMN progress parse error:', e); }
+        }
+        try {
+            var viewer = new BpmnJS({ container: container });
+            window.__bpmnViewer = viewer;
+            viewer.importXML(bpmnXml).then(function() {
+                viewer.get('canvas').zoom('fit-viewport');
+                function apply() { window.applyBpmnProgress(completedNodeIds, currentNodeIds, failedNodeId); }
+                apply();
+                setTimeout(apply, 150);
+            }).catch(function(err) {
+                container.innerHTML = '<p class="text-danger">Failed to load BPMN diagram.</p>';
+                console.error('BPMN import error:', err);
+            });
+        } catch (e) {
+            container.innerHTML = '<p class="text-danger">BPMN viewer failed to initialize.</p>';
+            console.error('BPMN viewer error:', e);
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initViewer);
+    } else {
+        initViewer();
+    }
+})();
+</script>
+<style>
+.bpmn-completed .djs-visual > :first-child, .bpmn-completed .djs-visual rect, .bpmn-completed .djs-visual path { stroke: #4caf50 !important; fill: #e8f5e9 !important; }
+.bpmn-current .djs-visual > :first-child, .bpmn-current .djs-visual rect, .bpmn-current .djs-visual path { stroke: #ff9800 !important; animation: bpmn-pulse 1.5s ease-in-out infinite; }
+.bpmn-failed .djs-visual > :first-child, .bpmn-failed .djs-visual rect, .bpmn-failed .djs-visual path { stroke: #f44336 !important; fill: #ffebee !important; }
+.bpmn-flow-completed .djs-visual line, .bpmn-flow-completed .djs-visual path { stroke: #4caf50 !important; stroke-width: 2px !important; }
+@keyframes bpmn-pulse { 50% { opacity: 0.7; } }
+.bpmn-container .djs-label text { fill: #1a1a1a !important; }
+</style>
+{% endif %}
+
+<!-- Load workflow scripts -->
+<script src="{% static 'js/workflow-diagram.js' %}"></script>
+<script src="{% static 'js/workflow-execution.js' %}"></script>
+<script>
+    const workflowId = "{{ workflow.id }}";
+    const executeUrl = "{% url 'workflow_execute' workflow.id %}";
+    const exportUrl = "{% url 'workflow_export' workflow.id %}";
+    const csrfToken = "{{ csrf_token }}";
+    
+    // Initialize workflow execution after page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeWorkflowExecution(workflowId, executeUrl, exportUrl, csrfToken);
+
+        // Flatpickr: MM/DD/YYYY display, YYYY-MM-DD for API; calendar icon opens picker
+        if (typeof flatpickr !== 'undefined') {
+            document.querySelectorAll('#workflow-form input.flatpickr-date').forEach(function(input) {
+                var fp = flatpickr(input, {
+                    dateFormat: 'Y-m-d',
+                    altInput: true,
+                    altFormat: 'm/d/Y',
+                    allowInput: false,
+                    appendTo: document.body,
+                    disableMobile: true
+                });
+                var group = input.closest('.date-input-group');
+                if (group) {
+                    var btn = group.querySelector('.date-picker-trigger');
+                    if (btn) btn.addEventListener('click', function() { fp.open(); });
+                }
+            });
+        }
+
+        // Schedule link: preserve form input variables for the scheduler page
+        var scheduleLink = document.getElementById('schedule-link');
+        if (scheduleLink && typeof getWorkflowFormInputData === 'function') {
+            scheduleLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                var form = document.getElementById('workflow-form');
+                if (form) {
+                    var inputData = getWorkflowFormInputData(form);
+                    try {
+                        sessionStorage.setItem('schedule_preset_input', JSON.stringify(inputData, null, 2));
+                    } catch (err) {
+                        console.warn('Could not store preset input for schedule:', err);
+                    }
+                }
+                window.location.href = scheduleLink.getAttribute('href');
+            });
+        }
+    });
+</script>
+
+<style>
+.workflow-detail-container {
+    padding: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.workflow-header {
+    margin-bottom: 2rem;
+}
+
+.workflow-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.5rem;
+    margin: 1rem 0;
+}
+
+.workflow-number-large {
+    background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%);
+    color: white;
+    font-size: 2rem;
+    font-weight: 700;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+    min-width: 80px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.workflow-title-content {
+    flex: 1;
+}
+
+.breadcrumb {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.breadcrumb a {
+    color: #2196f3;
+    text-decoration: none;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.workflow-header h1 {
+    font-size: 2rem;
+    margin: 0.5rem 0;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.workflow-header .description {
+    color: #555;
+    font-size: 1.1rem;
+    margin: 0.5rem 0;
+}
+
+.workflow-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.workflow-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.workflow-header-divider {
+    margin: 1.5rem 0;
+    border: 0;
+    border-top: 2px solid #e0e0e0;
+}
+
+.diagram-large {
+    width: 100%;
+    min-height: 560px;
+    height: 75vh;
+    max-height: 900px;
+}
+
+.workflow-layout {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.input-panel, .diagram-panel {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.diagram-panel {
+    background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+}
+
+.input-panel h2, .diagram-panel h2 {
+    font-size: 1.25rem;
+    margin: 0 0 1rem 0;
+    color: #1a1a1a;
+    font-weight: 700;
+}
+
+.workflow-detail-container label,
+.workflow-detail-container .form-group label {
+    font-weight: 700;
+}
+
+.date-input-group { display: flex; }
+.date-input-group .form-control { flex: 1; border-radius: 4px 0 0 4px; }
+.date-input-group .date-picker-trigger { border-radius: 0 4px 4px 0; }
+.flatpickr-calendar { z-index: 9999 !important; }
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.workflow-action-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.workflow-action-buttons .btn-large {
+    width: auto;
+    min-width: 10rem;
+}
+
+.required {
+    color: #d32f2f;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #2196f3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.help-text {
+    display: block;
+    margin-top: 0.25rem;
+    color: #666;
+    font-size: 0.875rem;
+}
+
+.btn-large {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+}
+
+.diagram-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e3f2fd;
+}
+
+.diagram-header h2 {
+    color: #1976d2;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.status-ready { 
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    color: #1565c0;
+    border: 1px solid #90caf9;
+}
+
+.status-running { 
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe082 100%);
+    color: #e65100;
+    border: 1px solid #ffb74d;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.status-complete { 
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    color: #2e7d32;
+    border: 1px solid #81c784;
+}
+
+.status-error { 
+    background: linear-gradient(135deg, #ffebee 0%, #ef9a9a 100%);
+    color: #c62828;
+    border: 1px solid #e57373;
+}
+
+.mermaid-container {
+    border: 2px solid #e3f2fd;
+    border-radius: 8px;
+    padding: 2rem;
+    background: linear-gradient(to bottom, #fafafa 0%, #ffffff 100%);
+    overflow-x: auto;
+    min-height: 400px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.mermaid-container .mermaid,
+.mermaid-container .mermaid-rendered {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 350px;
+}
+
+.mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.1));
+}
+
+.mermaid-container pre {
+    margin: 0;
+    background: transparent;
+    border: none;
+    font-size: 0;
+}
+
+.mermaid-container pre svg {
+    font-size: 16px;
+}
+
+.progress-steps {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.progress-steps h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+#steps-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.step-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.step-item i {
+    color: #4caf50;
+    flex-shrink: 0;
+}
+
+.step-item span {
+    flex-grow: 1;
+}
+
+.step-item small {
+    color: #999;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.results-panel {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.results-panel h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+#results-content {
+    margin-bottom: 1rem;
+}
+
+.result-summary {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.result-summary.approved {
+    background: #e8f5e9;
+    border-left: 4px solid #4caf50;
+}
+
+.result-summary.denied {
+    background: #ffebee;
+    border-left: 4px solid #f44336;
+}
+
+.result-summary.pending, .result-summary.review {
+    background: #fff3e0;
+    border-left: 4px solid #ff9800;
+}
+
+.result-summary h4 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.eligibility-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+.eligibility-badge.approved {
+    background: #4caf50;
+    color: white;
+}
+
+.eligibility-badge.denied {
+    background: #f44336;
+    color: white;
+}
+
+.result-json {
+    background: #f5f5f5;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Full Results Display */
+.full-results {
+    margin-top: 1.5rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+.full-results summary {
+    padding: 1rem;
+    cursor: pointer;
+    font-weight: 600;
+    color: #2196f3;
+    user-select: none;
+}
+
+.full-results summary:hover {
+    background: #f5f5f5;
+}
+
+.result-details {
+    padding: 1rem;
+    border-top: 1px solid #e0e0e0;
+    background: white;
+}
+
+.result-table {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.result-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.result-key {
+    font-weight: 600;
+    color: #555;
+    font-size: 0.9rem;
+}
+
+.result-value {
+    color: #333;
+}
+
+.result-value ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.result-value ul li {
+    margin: 0.25rem 0;
+}
+
+.nested-object {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin: 0.5rem 0;
+}
+
+.nested-row {
+    padding: 0.25rem 0;
+    font-size: 0.9rem;
+}
+
+.null-value {
+    color: #999;
+    font-style: italic;
+}
+
+.bool-true {
+    color: #4caf50;
+    font-weight: 600;
+}
+
+.bool-false {
+    color: #f44336;
+    font-weight: 600;
+}
+
+/* Export Dropdown */
+.export-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.export-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    min-width: 200px;
+}
+
+.export-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: white;
+    color: #333;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.2s;
+}
+
+.export-option:first-child {
+    border-radius: 4px 4px 0 0;
+}
+
+.export-option:last-child {
+    border-radius: 0 0 4px 4px;
+}
+
+.export-option:hover {
+    background: #f5f5f5;
+}
+
+.export-option i {
+    color: #2196f3;
+    width: 20px;
+}
+
+.checks-performed, .risk-factors {
+    margin-top: 1rem;
+}
+
+.checks-performed h4, .risk-factors h4 {
+    color: #555;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.checks-performed ul, .risk-factors ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.checks-performed li, .risk-factors li {
+    margin: 0.5rem 0;
+}
+
+.checks-performed .check-pass {
+    color: #4caf50;
+}
+
+.checks-performed .check-fail {
+    color: #f44336;
+}
+
+.checks-performed .check-flag {
+    color: #ff9800;
+}
+
+.checks-performed .check-result {
+    font-weight: 600;
+}
+
+.checks-performed .check-timestamp,
+.checks-performed .check-detail {
+    color: #666;
+    font-size: 0.85rem;
+    margin-left: 1rem;
+}
+
+@media (max-width: 1024px) {
+    .workflow-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .workflow-detail-container {
+        padding: 1rem;
+    }
+    
+    .workflow-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .result-row {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+    }
+    
+    .result-key {
+        font-size: 0.85rem;
+    }
+    
+    .export-menu {
+        right: auto;
+        left: 0;
+    }
+}
+</style>
+{% endblock %}

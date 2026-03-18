@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ agent.name }}{% endblock %}
+
+{% block content %}
+<div class="agent-detail-container">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 1.5rem;">
+        <a href="{% url 'agents_list' %}" style="color: #2196f3; text-decoration: none;">Agents</a>
+        <span style="color: #999;">/</span>
+        <span style="color: #1a1a1a; font-weight: 500;">{{ agent.name }}</span>
+    </div>
+    
+    <!-- Agent Header -->
+    <div class="agent-header">
+        <div class="agent-icon-large" aria-hidden="true">{{ agent.icon }}</div>
+        <div class="agent-header-content">
+            <div class="agent-title-row">
+                <h1>{{ agent.name }}</h1>
+                {% if agent.default %}
+                <span class="default-badge">★ Default Agent</span>
+                {% endif %}
+            </div>
+            <p class="agent-description-large">{{ agent.description }}</p>
+            <div class="agent-meta">
+                <div class="meta-item">
+                    <span class="meta-label">Agent ID:</span>
+                    <code class="meta-value">{{ agent.id }}</code>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Display Name:</span>
+                    <span class="meta-value">{{ agent.display_name }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Agent Configuration -->
+    <div class="detail-section">
+        <h2>Configuration</h2>
+        <div class="config-grid">
+            <div class="config-item">
+                <div class="config-label">Module</div>
+                <div class="config-value"><code>{{ agent.config_module }}</code></div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Config Object</div>
+                <div class="config-value"><code>{{ agent.config_name }}</code></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Agent Skills -->
+    {% if agent.has_skills %}
+    <div class="detail-section">
+        <h2>Agent Skills & Capabilities</h2>
+        <div class="skills-content">
+            {{ agent.skills_html|safe }}
+        </div>
+    </div>
+    {% else %}
+    <div class="detail-section">
+        <h2>Agent Skills & Capabilities</h2>
+        <div class="no-skills-message">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p>No skills documentation available for this agent.</p>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Action Buttons -->
+    <div class="action-section">
+        <a href="{% url 'chat' %}?agent={{ agent.id }}" class="btn btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            New Chat with {{ agent.display_name }}
+        </a>
+        <a href="{% url 'tools' %}?agent={{ agent.id }}" class="btn btn-secondary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            View Tools
+        </a>
+    </div>
+</div>
+
+<style>
+.agent-detail-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.agent-header {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.agent-icon-large {
+    font-size: 5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.agent-header-content {
+    flex: 1;
+}
+
+.agent-title-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.agent-title-row h1 {
+    font-size: 2rem;
+    margin: 0;
+    color: #1a1a1a;
+}
+
+.default-badge {
+    background: linear-gradient(135deg, #ffd700 0%, #ffb300 100%);
+    color: #000;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    box-shadow: 0 2px 6px rgba(255, 183, 0, 0.4);
+}
+
+.agent-description-large {
+    color: #555;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin: 0 0 1.25rem 0;
+}
+
+.agent-meta {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.meta-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.meta-label {
+    color: #666;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.meta-value {
+    color: #1a1a1a;
+    font-size: 0.95rem;
+}
+
+.meta-value code {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.detail-section {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.detail-section h2 {
+    font-size: 1.5rem;
+    margin: 0 0 1.5rem 0;
+    color: #1a1a1a;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.config-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.config-value {
+    font-size: 1rem;
+}
+
+.config-value code {
+    background: #f5f5f5;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    display: block;
+    color: #333;
+}
+
+.skills-content {
+    line-height: 1.7;
+    color: #333;
+}
+
+.skills-content h1,
+.skills-content h2,
+.skills-content h3,
+.skills-content h4 {
+    color: #1a1a1a;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.skills-content h1 {
+    font-size: 1.8rem;
+    border-bottom: 2px solid #2196f3;
+    padding-bottom: 0.5rem;
+}
+
+.skills-content h2 {
+    font-size: 1.4rem;
+}
+
+.skills-content h3 {
+    font-size: 1.2rem;
+}
+
+.skills-content code {
+    background: #f5f5f5;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+    color: #d32f2f;
+}
+
+.skills-content pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.skills-content pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+}
+
+.skills-content ul,
+.skills-content ol {
+    margin: 0.75rem 0 0.75rem 1.5rem;
+}
+
+.skills-content li {
+    margin: 0.5rem 0;
+}
+
+.skills-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.skills-content table th,
+.skills-content table td {
+    border: 1px solid #e0e0e0;
+    padding: 0.75rem;
+    text-align: left;
+}
+
+.skills-content table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+.skills-content blockquote {
+    border-left: 4px solid #2196f3;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: #555;
+    font-style: italic;
+}
+
+.no-skills-message {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #999;
+}
+
+.no-skills-message svg {
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.action-section {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.75rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    text-align: center;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: white;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+    background: #f8f8f8;
+    border-color: #2196f3;
+    color: #2196f3;
+}
+
+@media (max-width: 768px) {
+    .agent-detail-container {
+        padding: 1rem;
+    }
+    
+    .agent-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 1.5rem;
+    }
+    
+    .agent-icon-large {
+        font-size: 4rem;
+    }
+    
+    .agent-title-row {
+        justify-content: center;
+    }
+    
+    .agent-title-row h1 {
+        font-size: 1.5rem;
+    }
+    
+    .agent-meta {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .config-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .action-section {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}

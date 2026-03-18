@@ -1,0 +1,52 @@
+# RealtyIQ example prompts - one per line (copy and paste into RealtyIQ>)
+
+# Meta
+What tools do you have?
+What can you do?
+
+# Core listing
+List active properties for site 3
+Show the first 20 properties ending soonest
+Properties for agent 5
+List agents for site 3
+How many agents are there?
+Search agents by company name
+
+# Property detail and reference
+Show me full details for property 12345
+What's the status and reserve for property 500?
+Get property 100 details including bidding dates
+What property types are available?
+List property types for asset 2
+What asset types exist in the system?
+List all asset types
+List all auction types
+What auction types are configured for site 3?
+Get site configuration for example.com
+What domains are configured?
+
+# Counts
+How many active properties are there for site 3?
+Count properties ending soon
+How many properties does agent 5 have?
+
+# Auctions and bids
+Show auction dashboard for site 3
+List active auctions for agent 5
+What auctions are upcoming (status 17)?
+How many bidders are registered for property 100?
+List bidders for auction property 500
+Show bid summary for property 100
+Who has the highest bid on property 500?
+Bid activity for auction 100
+Show bid history for property 100
+List all bids on auction 500
+How many people are watching property 100?
+Watcher count for auction 500
+
+# Admin and trends
+Show admin dashboard for site 3
+What are the key metrics for the platform?
+Admin stats for last 30 days
+Property registration trend for last 30 days
+Show property signup graph for site 3

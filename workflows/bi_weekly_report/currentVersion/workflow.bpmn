@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_bi_weekly_report" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="BiWeeklyReport_Process" name="BI Weekly Report" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start" />
+    <bpmn:sequenceFlow id="Flow_start_to_1" sourceRef="StartEvent_1" targetRef="get_active_properties" />
+    <bpmn:serviceTask id="get_active_properties" name="Get active properties" />
+    <bpmn:sequenceFlow id="Flow_1_to_2" sourceRef="get_active_properties" targetRef="collect_portfolio_metrics" />
+    <bpmn:serviceTask id="collect_portfolio_metrics" name="Collect portfolio metrics" />
+    <bpmn:sequenceFlow id="Flow_2_to_3" sourceRef="collect_portfolio_metrics" targetRef="identify_top_performers" />
+    <bpmn:serviceTask id="identify_top_performers" name="Identify top performers" />
+    <bpmn:sequenceFlow id="Flow_3_to_4" sourceRef="identify_top_performers" targetRef="identify_properties_needing_attention" />
+    <bpmn:serviceTask id="identify_properties_needing_attention" name="Identify properties needing attention" />
+    <bpmn:sequenceFlow id="Flow_4_to_5" sourceRef="identify_properties_needing_attention" targetRef="conversion_funnel_analysis" />
+    <bpmn:serviceTask id="conversion_funnel_analysis" name="Conversion funnel analysis" />
+    <bpmn:sequenceFlow id="Flow_5_to_6" sourceRef="conversion_funnel_analysis" targetRef="week_over_week_trend" />
+    <bpmn:serviceTask id="week_over_week_trend" name="Week-over-week trend" />
+    <bpmn:sequenceFlow id="Flow_6_to_7" sourceRef="week_over_week_trend" targetRef="auction_readiness_snapshot" />
+    <bpmn:serviceTask id="auction_readiness_snapshot" name="Auction readiness snapshot" />
+    <bpmn:sequenceFlow id="Flow_7_to_8" sourceRef="auction_readiness_snapshot" targetRef="generate_recommended_actions" />
+    <bpmn:serviceTask id="generate_recommended_actions" name="Generate recommended actions" />
+    <bpmn:sequenceFlow id="Flow_8_to_9" sourceRef="generate_recommended_actions" targetRef="produce_executive_brief" />
+    <bpmn:serviceTask id="produce_executive_brief" name="Produce executive brief" />
+    <bpmn:sequenceFlow id="Flow_9_to_end" sourceRef="produce_executive_brief" targetRef="EndEvent_1" />
+    <bpmn:endEvent id="EndEvent_1" name="End" />
+    <bpmn:textAnnotation id="TextAnnotation_1wi2p0h">
+      <bpmn:text>test</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_168qzlc" associationDirection="None" sourceRef="StartEvent_1" targetRef="TextAnnotation_1wi2p0h" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="BiWeeklyReport_Process">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="342" y="2" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="348" y="-22" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="get_active_properties_di" bpmnElement="get_active_properties">
+        <dc:Bounds x="270" y="80" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="95" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="collect_portfolio_metrics_di" bpmnElement="collect_portfolio_metrics">
+        <dc:Bounds x="270" y="180" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="195" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="identify_top_performers_di" bpmnElement="identify_top_performers">
+        <dc:Bounds x="270" y="280" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="295" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="identify_properties_needing_attention_di" bpmnElement="identify_properties_needing_attention">
+        <dc:Bounds x="270" y="380" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="395" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="conversion_funnel_analysis_di" bpmnElement="conversion_funnel_analysis">
+        <dc:Bounds x="270" y="480" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="495" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="week_over_week_trend_di" bpmnElement="week_over_week_trend">
+        <dc:Bounds x="270" y="580" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="595" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="auction_readiness_snapshot_di" bpmnElement="auction_readiness_snapshot">
+        <dc:Bounds x="270" y="680" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="695" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="generate_recommended_actions_di" bpmnElement="generate_recommended_actions">
+        <dc:Bounds x="270" y="780" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="795" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="produce_executive_brief_di" bpmnElement="produce_executive_brief">
+        <dc:Bounds x="270" y="880" width="180" height="60" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="278" y="895" width="164" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="342" y="992" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="350" y="1028" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1wi2p0h_di" bpmnElement="TextAnnotation_1wi2p0h">
+        <dc:Bounds x="380" y="-80" width="99.98658798283262" height="29.998212413214816" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_start_to_1_di" bpmnElement="Flow_start_to_1">
+        <di:waypoint x="360" y="38" />
+        <di:waypoint x="360" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_to_2_di" bpmnElement="Flow_1_to_2">
+        <di:waypoint x="360" y="140" />
+        <di:waypoint x="360" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_to_3_di" bpmnElement="Flow_2_to_3">
+        <di:waypoint x="360" y="240" />
+        <di:waypoint x="360" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_to_4_di" bpmnElement="Flow_3_to_4">
+        <di:waypoint x="360" y="340" />
+        <di:waypoint x="360" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_to_5_di" bpmnElement="Flow_4_to_5">
+        <di:waypoint x="360" y="440" />
+        <di:waypoint x="360" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_to_6_di" bpmnElement="Flow_5_to_6">
+        <di:waypoint x="360" y="540" />
+        <di:waypoint x="360" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_to_7_di" bpmnElement="Flow_6_to_7">
+        <di:waypoint x="360" y="640" />
+        <di:waypoint x="360" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_to_8_di" bpmnElement="Flow_7_to_8">
+        <di:waypoint x="360" y="740" />
+        <di:waypoint x="360" y="780" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_to_9_di" bpmnElement="Flow_8_to_9">
+        <di:waypoint x="360" y="840" />
+        <di:waypoint x="360" y="880" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_9_to_end_di" bpmnElement="Flow_9_to_end">
+        <di:waypoint x="360" y="940" />
+        <di:waypoint x="360" y="992" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_168qzlc_di" bpmnElement="Association_168qzlc">
+        <di:waypoint x="371" y="6" />
+        <di:waypoint x="418" y="-50" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

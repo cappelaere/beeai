@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block title %}System Logs - RealtyIQ Agent{% endblock %}
+{% block content %}
+
+<div class="content-header">
+  <h2>System Logs</h2>
+  <p class="text-muted">View and monitor application logs</p>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h5 class="card-title mb-2">Log Files</h5>
+        <p class="text-muted small mb-0">Log files are timestamped on startup</p>
+      </div>
+      <div>
+        <div class="form-check form-switch d-inline-block me-3" style="vertical-align: middle;">
+          <input class="form-check-input" type="checkbox" id="auto-refresh-toggle" checked>
+          <label class="form-check-label small" for="auto-refresh-toggle">
+            Auto-refresh <span id="refresh-countdown" class="badge bg-secondary ms-1">5s</span>
+          </label>
+        </div>
+        <button id="refresh-logs-btn" class="btn btn-sm btn-outline-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+    
+    <div id="log-files-list" class="list-group mb-3">
+      <div class="text-center py-3">
+        <div class="spinner-border spinner-border-sm me-2" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        Loading log files...
+      </div>
+    </div>
+    
+    <div class="mb-3">
+      <label for="tail-lines" class="form-label small fw-semibold">Lines to display:</label>
+      <select id="tail-lines" class="form-select form-select-sm" style="width: 150px;">
+        <option value="100">Last 100 lines</option>
+        <option value="500">Last 500 lines</option>
+        <option value="1000" selected>Last 1000 lines</option>
+        <option value="5000">Last 5000 lines</option>
+        <option value="-1">All lines</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3" id="debug-panel" style="display: none; border-color: #0f62fe;">
+  <div class="card-body bg-light">
+    <strong>Debug Info:</strong>
+    <div id="debug-output" style="font-family: monospace; font-size: 11px; white-space: pre-wrap;"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="card-title mb-0" id="log-title">Log Content</h5>
+      <div>
+        <button id="download-log-btn" class="btn btn-sm btn-outline-secondary" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download
+        </button>
+        <button id="copy-log-btn" class="btn btn-sm btn-outline-secondary ms-2" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy
+        </button>
+      </div>
+    </div>
+    
+    <div id="log-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 12px; line-height: 1.5; max-height: 600px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">
+      <div class="text-center py-5" style="color: #888;">
+        Select a log file to view its contents
+      </div>
+    </div>
+    
+    <div id="log-info" class="mt-2 text-muted small" style="display: none;">
+      <span id="log-size"></span> • 
+      <span id="log-lines"></span> • 
+      <span id="log-modified"></span>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var currentLogName = "{{ current_log }}";
+  var selectedLogName = null;
+  var autoRefreshInterval = null;
+  var countdownInterval = null;
+  var secondsLeft = 5;
+  
+  // Debug helper
+  function debug(msg) {
+    console.log('[LOGS]', msg);
+    var debugPanel = document.getElementById('debug-panel');
+    var debugOutput = document.getElementById('debug-output');
+    if (debugPanel && debugOutput) {
+      debugPanel.style.display = 'block';
+      var time = new Date().toLocaleTimeString();
+      debugOutput.textContent = time + ': ' + msg + '\n' + debugOutput.textContent.substring(0, 500);
+    }
+  }
+  
+  debug('Page loaded, initializing...');
+  
+  // Load log files on page load
+  loadLogFiles();
+  
+  // Start auto-refresh
+  startAutoRefresh();
+  
+  // Auto-refresh toggle
+  document.getElementById('auto-refresh-toggle').addEventListener('change', function() {
+    if (this.checked) {
+      startAutoRefresh();
+    } else {
+      stopAutoRefresh();
+    }
+  });
+  
+  // Refresh button
+  document.getElementById('refresh-logs-btn').addEventListener('click', function() {
+    loadLogFiles();
+    if (selectedLogName) {
+      loadLogContent(selectedLogName);
+    }
+    resetCountdown();
+  });
+  
+  // Tail lines selector
+  document.getElementById('tail-lines').addEventListener('change', function() {
+    if (selectedLogName) {
+      loadLogContent(selectedLogName);
+    }
+  });
+  
+  // Download button
+  document.getElementById('download-log-btn').addEventListener('click', function() {
+    if (selectedLogName) {
+      window.open('/api/logs/' + selectedLogName + '/?download=true', '_blank');
+    }
+  });
+  
+  // Copy button
+  document.getElementById('copy-log-btn').addEventListener('click', function() {
+    var content = document.getElementById('log-content').textContent;
+    navigator.clipboard.writeText(content).then(function() {
+      var btn = document.getElementById('copy-log-btn');
+      var originalText = btn.innerHTML;
+      btn.innerHTML = '✓ Copied!';
+      btn.classList.add('btn-success');
+      btn.classList.remove('btn-outline-secondary');
+      setTimeout(function() {
+        btn.innerHTML = originalText;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-secondary');
+      }, 2000);
+    });
+  });
+  
+  function loadLogFiles() {
+    debug('Loading log files from API...');
+    fetch('/api/logs/')
+      .then(function(response) { 
+        debug('API response status: ' + response.status);
+        return response.json(); 
+      })
+      .then(function(data) {
+        debug('Received ' + (data.logs ? data.logs.length : 0) + ' log files');
+        var listContainer = document.getElementById('log-files-list');
+        
+        if (!data.logs || data.logs.length === 0) {
+          listContainer.innerHTML = '<div class="text-center text-muted py-3">No log files found</div>';
+          return;
+        }
+        
+        listContainer.innerHTML = '';
+        
+        data.logs.forEach(function(log) {
+          var item = document.createElement('button');
+          item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+          item.onclick = function() { 
+            debug('Clicked on: ' + log.name);
+            selectLog(log.name); 
+          };
+          
+          var content = document.createElement('div');
+          content.innerHTML = '<strong>' + log.name + '</strong>' +
+                             (log.is_current ? ' <span class="badge bg-primary ms-2">Current</span>' : '') +
+                             '<br><small class="text-muted">' + log.size_formatted + '</small>';
+          
+          item.appendChild(content);
+          listContainer.appendChild(item);
+        });
+        
+        console.log('Loaded', data.logs.length, 'log files');
+        
+        // Auto-select current log
+        if (data.current_log && !selectedLogName) {
+          console.log('Auto-selecting current log:', data.current_log);
+          selectLog(data.current_log);
+        }
+      })
+      .catch(function(error) {
+        console.error('Error loading logs:', error);
+        document.getElementById('log-files-list').innerHTML = 
+          '<div class="alert alert-danger">Error loading log files: ' + error.message + '</div>';
+      });
+  }
+  
+  function selectLog(logName) {
+    debug('selectLog() called for: ' + logName);
+    selectedLogName = logName;
+    
+    // Update active state
+    document.querySelectorAll('#log-files-list button').forEach(function(btn) {
+      btn.classList.remove('active');
+    });
+    
+    var selectedBtn = Array.from(document.querySelectorAll('#log-files-list button')).find(function(btn) {
+      return btn.textContent.includes(logName);
+    });
+    if (selectedBtn) {
+      selectedBtn.classList.add('active');
+      debug('Button marked as active');
+    } else {
+      debug('ERROR: Could not find button!');
+    }
+    
+    // Enable buttons
+    document.getElementById('download-log-btn').disabled = false;
+    document.getElementById('copy-log-btn').disabled = false;
+    
+    // Load content
+    debug('Loading content for: ' + logName);
+    loadLogContent(logName);
+  }
+  
+  function loadLogContent(logName) {
+    var tail = document.getElementById('tail-lines').value;
+    var logContent = document.getElementById('log-content');
+    var logInfo = document.getElementById('log-info');
+    
+    debug('Fetching: /api/logs/' + logName + '/?tail=' + tail);
+    logContent.innerHTML = '<div class="text-center py-3" style="color: #888;"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading log content...</div>';
+    
+    fetch('/api/logs/' + logName + '/?tail=' + tail)
+      .then(function(response) { 
+        debug('Content API status: ' + response.status);
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
+        }
+        return response.json(); 
+      })
+      .then(function(data) {
+        debug('Content received: ' + (data.content ? data.content.length : 0) + ' chars');
+        
+        if (data.error) {
+          debug('ERROR from API: ' + data.error);
+          logContent.innerHTML = '<div style="color: #f48771;">Error: ' + data.error + '</div>';
+          logInfo.style.display = 'none';
+          return;
+        }
+        
+        // Check if content exists
+        if (!data.content || data.content.length === 0) {
+          debug('Log file is empty');
+          logContent.innerHTML = '<div style="color: #888;">Log file is empty</div>';
+          logInfo.style.display = 'none';
+          return;
+        }
+        
+        // Save current scroll position (check if at bottom)
+        var wasAtBottom = (logContent.scrollHeight - logContent.scrollTop - logContent.clientHeight) < 50;
+        
+        // Display content with syntax highlighting for log levels
+        var content = data.content;
+        content = content.replace(/ERROR/g, '<span style="color: #f48771; font-weight: bold;">ERROR</span>');
+        content = content.replace(/WARNING/g, '<span style="color: #ffcc66; font-weight: bold;">WARNING</span>');
+        content = content.replace(/INFO/g, '<span style="color: #6eb5ff;">INFO</span>');
+        content = content.replace(/DEBUG/g, '<span style="color: #888;">DEBUG</span>');
+        
+        logContent.innerHTML = content;
+        
+        // Update info
+        document.getElementById('log-title').textContent = 'Log: ' + logName;
+        document.getElementById('log-size').textContent = (data.size / 1024).toFixed(1) + ' KB';
+        document.getElementById('log-lines').textContent = data.total_lines + ' lines displayed';
+        var modDate = new Date(data.modified * 1000);
+        document.getElementById('log-modified').textContent = 'Modified: ' + modDate.toLocaleString();
+        logInfo.style.display = 'block';
+        
+        // Scroll to bottom on first load or if was already at bottom
+        if (wasAtBottom || logContent.scrollTop === 0) {
+          logContent.scrollTop = logContent.scrollHeight;
+        }
+      })
+      .catch(function(error) {
+        console.error('Error loading log:', error);
+        logContent.innerHTML = '<div style="color: #f48771;">Error loading log: ' + error.message + '</div>';
+        logInfo.style.display = 'none';
+      });
+  }
+  
+  function startAutoRefresh() {
+    stopAutoRefresh(); // Clear any existing intervals
+    
+    // Refresh content every 5 seconds
+    autoRefreshInterval = setInterval(function() {
+      if (selectedLogName) {
+        loadLogContent(selectedLogName);
+      }
+      resetCountdown();
+    }, 5000);
+    
+    // Update countdown every second
+    resetCountdown();
+    countdownInterval = setInterval(function() {
+      secondsLeft--;
+      if (secondsLeft < 0) {
+        secondsLeft = 5;
+      }
+      document.getElementById('refresh-countdown').textContent = secondsLeft + 's';
+    }, 1000);
+  }
+  
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    document.getElementById('refresh-countdown').textContent = 'Off';
+  }
+  
+  function resetCountdown() {
+    secondsLeft = 5;
+    document.getElementById('refresh-countdown').textContent = '5s';
+  }
+})();
+</script>
+{% endblock %}

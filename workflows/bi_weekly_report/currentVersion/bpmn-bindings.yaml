@@ -1,0 +1,35 @@
+# BPMN element → handler bindings for BI Weekly Report workflow
+# Used by the BPMN runner to invoke Python methods on BiWeeklyReportWorkflow.
+# Element IDs match the serviceTask ids in workflow.bpmn.
+
+workflow_id: bi_weekly_report
+executor: workflows.bi_weekly_report.workflow.BiWeeklyReportWorkflow
+
+serviceTasks:
+  get_active_properties:
+    handler: get_active_properties
+    description: Fetch active property IDs from property API for the date range
+  collect_portfolio_metrics:
+    handler: collect_portfolio_metrics
+    description: Aggregate metrics (views, brochure/IFB downloads, bidders) per property
+  identify_top_performers:
+    handler: identify_top_performers
+    description: Call top-properties API (e.g. by views, limit 10)
+  identify_properties_needing_attention:
+    handler: identify_properties_needing_attention
+    description: Call underperforming API (min_views=50, max_bidder_registrations=2)
+  conversion_funnel_analysis:
+    handler: conversion_funnel_analysis
+    description: Build funnel (views → brochure → IFB → bidders) and conversion rates
+  week_over_week_trend:
+    handler: week_over_week_trend
+    description: Compare this period vs prior period, compute % change
+  auction_readiness_snapshot:
+    handler: auction_readiness_snapshot
+    description: Flag properties with near-term auction date as on_track / needs_attention
+  generate_recommended_actions:
+    handler: generate_recommended_actions
+    description: Generate actions from underperformers, top performers, low-readiness auctions
+  produce_executive_brief:
+    handler: produce_executive_brief
+    description: Produce executive_brief_markdown (headline, totals, funnel, trend, actions)

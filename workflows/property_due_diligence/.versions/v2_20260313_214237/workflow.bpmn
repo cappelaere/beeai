@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_property_due_diligence" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="PropertyDueDiligence_Process" name="Property Due Diligence" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start" />
+    <bpmn:sequenceFlow id="Flow_start_to_1" sourceRef="StartEvent_1" targetRef="get_property_details" />
+    <bpmn:serviceTask id="get_property_details" name="Get property details" />
+    <bpmn:sequenceFlow id="Flow_1_to_2" sourceRef="get_property_details" targetRef="parallel_research" />
+    <bpmn:serviceTask id="parallel_research" name="Parallel research" />
+    <bpmn:sequenceFlow id="Flow_2_to_3" sourceRef="parallel_research" targetRef="assess_risks" />
+    <bpmn:serviceTask id="assess_risks" name="Assess risks" />
+    <bpmn:sequenceFlow id="Flow_3_to_4" sourceRef="assess_risks" targetRef="generate_report" />
+    <bpmn:serviceTask id="generate_report" name="Generate report" />
+    <bpmn:sequenceFlow id="Flow_4_to_end" sourceRef="generate_report" targetRef="EndEvent_1" />
+    <bpmn:endEvent id="EndEvent_1" name="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="PropertyDueDiligence_Process">
+      <bpmndi:BPMNShape id="get_property_details_di" bpmnElement="get_property_details">
+        <dc:Bounds x="270" y="80" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="parallel_research_di" bpmnElement="parallel_research">
+        <dc:Bounds x="270" y="200" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="assess_risks_di" bpmnElement="assess_risks">
+        <dc:Bounds x="270" y="320" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="generate_report_di" bpmnElement="generate_report">
+        <dc:Bounds x="270" y="440" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="322" y="12" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="328" y="-12" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="322" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="330" y="578" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_start_to_1_di" bpmnElement="Flow_start_to_1">
+        <di:waypoint x="340" y="48" />
+        <di:waypoint x="340" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_to_2_di" bpmnElement="Flow_1_to_2">
+        <di:waypoint x="340" y="140" />
+        <di:waypoint x="340" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_to_3_di" bpmnElement="Flow_2_to_3">
+        <di:waypoint x="340" y="260" />
+        <di:waypoint x="340" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_to_4_di" bpmnElement="Flow_3_to_4">
+        <di:waypoint x="340" y="380" />
+        <di:waypoint x="340" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_to_end_di" bpmnElement="Flow_4_to_end">
+        <di:waypoint x="340" y="500" />
+        <di:waypoint x="340" y="542" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

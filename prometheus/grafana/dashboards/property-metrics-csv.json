@@ -1,0 +1,181 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+      "description": "Raw seed data: property_id, date, views, brochure_downloads, bidder_registrations, etc. Select the Infinity datasource where you loaded the CSV.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "align": "auto" },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "cellHeight": "sm", "footer": { "countRows": true, "fields": "", "reducer": ["sum"], "show": true }, "showHeader": true, "sortBy": [] },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "${csv_url}",
+          "url_options": { "method": "GET", "params": [], "headers": [] },
+          "format": "table",
+          "root_selector": "",
+          "columns": []
+        }
+      ],
+      "title": "Property metric daily seed (CSV)",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+      "description": "Total views across all properties and dates in the CSV",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 10 },
+      "id": 2,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "views", "values": false }, "textMode": "value_and_name" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "${csv_url}",
+          "url_options": { "method": "GET", "params": [], "headers": [] },
+          "format": "table",
+          "root_selector": "",
+          "columns": []
+        }
+      ],
+      "transformations": [
+        { "id": "reduce", "options": { "reducers": ["sum"], "include": "views", "mode": "reduceFields" } }
+      ],
+      "title": "Total views (CSV)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+      "description": "Total bidder registrations in the CSV",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 10 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "bidder_registrations", "values": false }, "textMode": "value_and_name" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "${csv_url}",
+          "url_options": { "method": "GET", "params": [], "headers": [] },
+          "format": "table",
+          "root_selector": "",
+          "columns": []
+        }
+      ],
+      "transformations": [
+        { "id": "reduce", "options": { "reducers": ["sum"], "include": "bidder_registrations", "mode": "reduceFields" } }
+      ],
+      "title": "Total bidders (CSV)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+      "description": "Number of rows (property × date) in the CSV",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 10 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["count"], "fields": "", "values": true }, "textMode": "value_and_name" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${infinity_datasource}" },
+          "refId": "A",
+          "type": "csv",
+          "source": "url",
+          "url": "${csv_url}",
+          "url_options": { "method": "GET", "params": [], "headers": [] },
+          "format": "table",
+          "root_selector": "",
+          "columns": []
+        }
+      ],
+      "title": "Rows (CSV)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["property-metrics", "csv", "infinity"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "Infinity", "value": "infinity" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Infinity datasource",
+        "multi": false,
+        "name": "infinity_datasource",
+        "options": [],
+        "query": "yesoreyeram-infinity-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": true, "text": "http://host.docker.internal:8765/data/source/property_metric_daily_seed_30d_10properties.csv", "value": "http://host.docker.internal:8765/data/source/property_metric_daily_seed_30d_10properties.csv" },
+        "hide": 0,
+        "label": "CSV URL",
+        "name": "csv_url",
+        "options": [
+          { "selected": true, "text": "http://host.docker.internal:8765/data/source/property_metric_daily_seed_30d_10properties.csv", "value": "http://host.docker.internal:8765/data/source/property_metric_daily_seed_30d_10properties.csv" }
+        ],
+        "skipUrlSync": false,
+        "type": "text"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Property metrics (CSV)",
+  "uid": "property-metrics-csv",
+  "version": 1,
+  "weekStart": ""
+}

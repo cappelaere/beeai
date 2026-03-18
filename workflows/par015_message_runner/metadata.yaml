@@ -1,0 +1,9 @@
+id: par015_message_runner
+hide_from_catalog: true
+name: PAR-015 message catch runner test
+description: BPMN intermediate message catch for runner integration tests.
+icon: 🧪
+category: Other
+estimated_duration: 1 second
+workflow_number: 996
+input_schema: {}

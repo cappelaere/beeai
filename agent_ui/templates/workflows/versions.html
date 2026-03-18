@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Versions: {{ workflow.name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/workflows.css' %}?v=2.2">
+<style>
+.version-history-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.header-left h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+    color: #1a1a1a;
+}
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.breadcrumb a {
+    color: #2196f3;
+    text-decoration: none;
+}
+
+.header-right {
+    display: flex;
+    gap: 1rem;
+}
+
+.version-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.version-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: box-shadow 0.2s;
+}
+
+.version-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.version-card.current {
+    border-color: #2196f3;
+    border-width: 2px;
+    background: #f3f9ff;
+}
+
+.version-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.version-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.version-title h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #1a1a1a;
+}
+
+.version-tag {
+    background: #2196f3;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.current-badge {
+    background: #4caf50;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.version-meta {
+    text-align: right;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.version-comment {
+    color: #555;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    font-style: italic;
+}
+
+.version-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: #2196f3;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1976d2;
+}
+
+.btn-secondary {
+    background: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+    background: #e8e8e8;
+}
+
+.btn-warning {
+    background: #ff9800;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #f57c00;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #666;
+}
+
+.empty-state svg {
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+/* View Files modal */
+.files-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+.files-modal-overlay.active {
+    display: flex;
+}
+.files-modal {
+    background: white;
+    border-radius: 8px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.files-modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.files-modal-header h3 { margin: 0; font-size: 1.1rem; color: #1a1a1a; }
+.files-modal-tabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+.files-modal-tabs button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #666;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+.files-modal-tabs button:hover { color: #2196f3; }
+.files-modal-tabs button.active {
+    color: #2196f3;
+    font-weight: 600;
+    border-bottom-color: #2196f3;
+}
+.files-modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem 1.5rem;
+}
+.files-modal-body pre {
+    margin: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.files-modal-loading, .files-modal-error {
+    padding: 2rem;
+    text-align: center;
+    color: #666;
+}
+.files-modal-error { color: #c62828; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="version-history-container">
+    <div class="page-header">
+        <div class="header-left">
+            <div class="breadcrumb">
+                <a href="{% url 'workflows_list' %}">Workflows</a>
+                <span>/</span>
+                <a href="{% url 'workflow_detail' workflow.id %}">{{ workflow.name }}</a>
+                <span>/</span>
+                <span>Version History</span>
+            </div>
+            <h1>{{ workflow.icon }} Version History</h1>
+            <p style="color: #666; margin: 0.5rem 0 0 0;">{{ workflow.name }}</p>
+        </div>
+        <div class="header-right">
+            <a href="{% url 'workflow_edit' workflow.id %}" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                Edit Workflow
+            </a>
+        </div>
+    </div>
+    
+    {% if versions_data %}
+    <div class="version-list">
+        {% for item in versions_data %}
+        {% with version=item.version %}
+        <div class="version-card {% if version.is_current %}current{% endif %}">
+            <div class="version-header">
+                <div class="version-title">
+                    <h3>Version {{ version.version_number }}</h3>
+                    {% if version.version_tag %}
+                    <span class="version-tag">{{ version.version_tag }}</span>
+                    {% endif %}
+                    {% if version.is_current %}
+                    <span class="current-badge">CURRENT</span>
+                    {% endif %}
+                </div>
+                <div class="version-meta">
+                    <div>{{ version.created_at|date:"Y-m-d H:i:s" }}</div>
+                    <div>by User {{ version.created_by_user_id }}</div>
+                </div>
+            </div>
+            
+            <p class="version-comment">
+                {% if version.comment %}
+                    {{ version.comment }}
+                {% else %}
+                    <span style="color: #999;">No description provided</span>
+                {% endif %}
+            </p>
+            
+            <div class="version-actions">
+                {% if not version.is_current %}
+                <button class="btn btn-warning" onclick="restoreVersion('{{ workflow.id }}', {{ version.version_number }})">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="1 4 1 10 7 10"/>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                    </svg>
+                    Restore This Version
+                </button>
+                {% endif %}
+                
+                {% if item.prev_version_number %}
+                <a href="{% url 'workflow_version_compare' workflow.id version.version_number item.prev_version_number %}" class="btn btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    Compare with v{{ item.prev_version_number }}
+                </a>
+                {% endif %}
+                
+                <button class="btn btn-secondary" onclick="viewVersionFiles('{{ workflow.id }}', {{ version.version_number }})">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                        <polyline points="13 2 13 9 20 9"/>
+                    </svg>
+                    View Files
+                </button>
+            </div>
+        </div>
+        {% endwith %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <h2>No Versions Yet</h2>
+        <p>Versions will appear here when you save changes to the workflow.</p>
+        <a href="{% url 'workflow_edit' workflow.id %}" class="btn btn-primary" style="margin-top: 1rem;">
+            Edit Workflow to Create First Version
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- View Version Files modal -->
+<div id="files-modal-overlay" class="files-modal-overlay" onclick="if (event.target === this) closeFilesModal()">
+    <div class="files-modal">
+        <div class="files-modal-header">
+            <h3 id="files-modal-title">Version files</h3>
+            <button type="button" class="btn btn-secondary" onclick="closeFilesModal()" style="padding: 0.35rem 0.75rem;">Close</button>
+        </div>
+        <div class="files-modal-tabs" id="files-modal-tabs"></div>
+        <div class="files-modal-body" id="files-modal-body">
+            <div class="files-modal-loading" id="files-modal-loading">Loading…</div>
+            <div class="files-modal-error" id="files-modal-error" style="display: none;"></div>
+            <pre id="files-modal-content" style="display: none;"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+function getCsrfToken() {
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='));
+    return cookieValue ? cookieValue.split('=')[1] : '';
+}
+
+async function restoreVersion(workflowId, versionNumber) {
+    if (!confirm(`Are you sure you want to restore to version ${versionNumber}? This will create a new version with the restored content.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/workflows/${workflowId}/versions/${versionNumber}/restore/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`Successfully restored to version ${versionNumber}. New version ${result.new_version_number} created.`);
+            window.location.reload();
+        } else {
+            alert(`Error: ${result.error || 'Failed to restore version'}`);
+        }
+    } catch (error) {
+        console.error('Error restoring version:', error);
+        alert('Failed to restore version. Please try again.');
+    }
+}
+
+let currentFilesData = null;
+
+function closeFilesModal() {
+    document.getElementById('files-modal-overlay').classList.remove('active');
+    currentFilesData = null;
+}
+
+async function viewVersionFiles(workflowId, versionNumber) {
+    const overlay = document.getElementById('files-modal-overlay');
+    const title = document.getElementById('files-modal-title');
+    const tabsEl = document.getElementById('files-modal-tabs');
+    const body = document.getElementById('files-modal-body');
+    const loading = document.getElementById('files-modal-loading');
+    const errorEl = document.getElementById('files-modal-error');
+    const contentPre = document.getElementById('files-modal-content');
+
+    title.textContent = `Version ${versionNumber} – Files`;
+    tabsEl.innerHTML = '';
+    loading.style.display = 'block';
+    errorEl.style.display = 'none';
+    contentPre.style.display = 'none';
+    overlay.classList.add('active');
+
+    try {
+        const response = await fetch(`/api/workflows/${workflowId}/versions/${versionNumber}/files/`);
+        const result = await response.json();
+
+        if (!result.success) {
+            errorEl.textContent = result.error || 'Failed to load files';
+            errorEl.style.display = 'block';
+            loading.style.display = 'none';
+            return;
+        }
+
+        currentFilesData = result.files || {};
+        const fileNames = Object.keys(currentFilesData);
+        loading.style.display = 'none';
+
+        if (fileNames.length === 0) {
+            errorEl.textContent = 'No files in this version.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        fileNames.forEach((name, idx) => {
+            const btn = document.createElement('button');
+            btn.textContent = name;
+            btn.type = 'button';
+            if (idx === 0) btn.classList.add('active');
+            btn.onclick = () => showFileInModal(name);
+            tabsEl.appendChild(btn);
+        });
+
+        showFileInModal(fileNames[0]);
+        contentPre.style.display = 'block';
+    } catch (err) {
+        loading.style.display = 'none';
+        errorEl.textContent = 'Failed to load version files. Please try again.';
+        errorEl.style.display = 'block';
+        console.error('Error loading version files:', err);
+    }
+}
+
+function showFileInModal(filename) {
+    if (!currentFilesData || !currentFilesData[filename]) return;
+    document.querySelectorAll('#files-modal-tabs button').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent === filename);
+    });
+    const pre = document.getElementById('files-modal-content');
+    pre.textContent = currentFilesData[filename];
+}
+</script>
+{% endblock %}

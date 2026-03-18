@@ -1,0 +1,134 @@
+<!-- Approval Form Template -->
+<div class="task-form-container">
+    <h3>Approval Decision</h3>
+    
+    <form id="approval-form" class="task-form">
+        {% csrf_token %}
+        
+        <!-- Decision -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Decision <span style="color: #f44336;">*</span>
+            </label>
+            <div style="display: flex; gap: 1.5rem;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="radio" name="decision" value="approved" required style="margin-right: 0.5rem;">
+                    <span style="color: #4caf50; font-weight: 500;">✓ Approve</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="radio" name="decision" value="denied" required style="margin-right: 0.5rem;">
+                    <span style="color: #f44336; font-weight: 500;">✗ Deny</span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Comments -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label for="comments" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Comments
+                <span id="comments-required" style="color: #f44336; display: none;">*</span>
+            </label>
+            <textarea 
+                id="comments" 
+                name="comments" 
+                rows="4" 
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.95rem;"
+                placeholder="Enter your comments here..."
+            ></textarea>
+            <small style="color: #666; display: block; margin-top: 0.25rem;">
+                Required if denying, optional if approving
+            </small>
+        </div>
+        
+        <!-- Confidence Rating (Optional) -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Confidence Level (Optional)
+            </label>
+            <div class="star-rating" style="display: flex; gap: 0.5rem;">
+                <input type="radio" name="confidence" value="1" id="conf1" style="display: none;">
+                <label for="conf1" class="star" style="cursor: pointer; font-size: 1.5rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="confidence" value="2" id="conf2" style="display: none;">
+                <label for="conf2" class="star" style="cursor: pointer; font-size: 1.5rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="confidence" value="3" id="conf3" style="display: none;">
+                <label for="conf3" class="star" style="cursor: pointer; font-size: 1.5rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="confidence" value="4" id="conf4" style="display: none;">
+                <label for="conf4" class="star" style="cursor: pointer; font-size: 1.5rem; color: #ddd;">★</label>
+                
+                <input type="radio" name="confidence" value="5" id="conf5" style="display: none;">
+                <label for="conf5" class="star" style="cursor: pointer; font-size: 1.5rem; color: #ddd;">★</label>
+            </div>
+            <small style="color: #666; display: block; margin-top: 0.5rem;">
+                Rate your confidence in this decision (1-5 stars)
+            </small>
+        </div>
+    </form>
+</div>
+
+<script>
+// Form validation
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('approval-form');
+    const decisionRadios = document.querySelectorAll('input[name="decision"]');
+    const commentsField = document.getElementById('comments');
+    const commentsRequired = document.getElementById('comments-required');
+    
+    // Update comments requirement based on decision
+    decisionRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'denied') {
+                commentsField.setAttribute('required', 'required');
+                commentsRequired.style.display = 'inline';
+            } else {
+                commentsField.removeAttribute('required');
+                commentsRequired.style.display = 'none';
+            }
+        });
+    });
+    
+    // Star rating functionality
+    const stars = document.querySelectorAll('.star');
+    const starInputs = document.querySelectorAll('input[name="confidence"]');
+    
+    stars.forEach((star, index) => {
+        star.addEventListener('click', function() {
+            starInputs[index].checked = true;
+            
+            // Update star colors
+            stars.forEach((s, i) => {
+                if (i <= index) {
+                    s.style.color = '#ffc107';
+                } else {
+                    s.style.color = '#ddd';
+                }
+            });
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            stars.forEach((s, i) => {
+                if (i <= index) {
+                    s.style.color = '#ffc107';
+                } else {
+                    s.style.color = '#ddd';
+                }
+            });
+        });
+    });
+    
+    // Reset stars on mouse leave
+    const ratingContainer = document.querySelector('.star-rating');
+    ratingContainer.addEventListener('mouseleave', function() {
+        const checkedIndex = Array.from(starInputs).findIndex(input => input.checked);
+        stars.forEach((s, i) => {
+            if (i <= checkedIndex) {
+                s.style.color = '#ffc107';
+            } else {
+                s.style.color = '#ddd';
+            }
+        });
+    });
+});
+</script>

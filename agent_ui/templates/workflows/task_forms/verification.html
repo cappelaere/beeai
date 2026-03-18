@@ -1,0 +1,93 @@
+<!-- Verification Form Template -->
+<div class="task-form-container">
+    <h3>Verification Result</h3>
+    
+    <form id="verification-form" class="task-form">
+        {% csrf_token %}
+        
+        <!-- Verification Result -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Verification Result <span style="color: #f44336;">*</span>
+            </label>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <label style="display: flex; align-items: center; padding: 0.75rem; border: 2px solid #ddd; border-radius: 4px; cursor: pointer; transition: all 0.2s;">
+                    <input type="radio" name="result" value="pass" required style="margin-right: 0.75rem;">
+                    <div>
+                        <span style="color: #4caf50; font-weight: 600;">✓ Pass</span>
+                        <small style="display: block; color: #666; margin-top: 0.25rem;">Verification successful</small>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; padding: 0.75rem; border: 2px solid #ddd; border-radius: 4px; cursor: pointer; transition: all 0.2s;">
+                    <input type="radio" name="result" value="fail" required style="margin-right: 0.75rem;">
+                    <div>
+                        <span style="color: #f44336; font-weight: 600;">✗ Fail</span>
+                        <small style="display: block; color: #666; margin-top: 0.25rem;">Verification failed</small>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; padding: 0.75rem; border: 2px solid #ddd; border-radius: 4px; cursor: pointer; transition: all 0.2s;">
+                    <input type="radio" name="result" value="flag" required style="margin-right: 0.75rem;">
+                    <div>
+                        <span style="color: #ff9800; font-weight: 600;">⚠️ Flag for Review</span>
+                        <small style="display: block; color: #666; margin-top: 0.25rem;">Needs additional review</small>
+                    </div>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Notes -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label for="notes" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Notes <span style="color: #f44336;">*</span>
+            </label>
+            <textarea 
+                id="notes" 
+                name="notes" 
+                rows="6" 
+                required
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.95rem;"
+                placeholder="Provide detailed notes about your verification..."
+            ></textarea>
+        </div>
+        
+        <!-- Attachments (optional) -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label for="attachments" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">
+                Attachments (Optional)
+            </label>
+            <input 
+                type="file" 
+                id="attachments" 
+                name="attachments"
+                multiple
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;"
+            >
+            <small style="color: #666; display: block; margin-top: 0.25rem;">
+                Accepted formats: PDF, DOC, DOCX, JPG, PNG, TXT (max 10MB per file)
+            </small>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Highlight selected radio option
+    const resultRadios = document.querySelectorAll('input[name="result"]');
+    resultRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            // Remove highlight from all labels
+            document.querySelectorAll('input[name="result"]').forEach(r => {
+                r.parentElement.style.borderColor = '#ddd';
+                r.parentElement.style.backgroundColor = 'transparent';
+            });
+            
+            // Highlight selected
+            this.parentElement.style.borderColor = '#2196f3';
+            this.parentElement.style.backgroundColor = '#e3f2fd';
+        });
+    });
+    
+    console.log('Verification form initialized');
+});
+</script>

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Chat - RealtyIQ Agent{% endblock %}
+{% block content %}
+<script>
+  window.CSRF_TOKEN = "{{ csrf_token }}";
+  window.REALTYIQ_API_BASE = "";
+  window.REALTYIQ_FAVORITE_CARDS = {{ favorite_cards_json|safe }};
+  window.REALTYIQ_FAVORITE_WORKFLOWS = {{ favorite_workflows_json|safe }};
+</script>
+
+<!-- Favorite Workflows Panel -->
+<section class="favorite-workflows-panel" id="favorite-workflows-panel" aria-label="Favorite workflows panel">
+    <div class="favorite-workflows-header">
+        <h3 class="favorite-workflows-title">Favorite Workflows</h3>
+        <button type="button" class="toggle-panel-btn" id="toggle-workflows-btn" aria-label="Toggle favorite workflows panel" title="Collapse panel">
+            <svg class="chevron-up" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"/>
+            </svg>
+            <svg class="chevron-down" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        </button>
+    </div>
+    <div class="favorite-workflows-content" id="favorite-workflows-content">
+        <div class="favorite-workflows-grid" id="favorite-workflows"><span class="text-muted small">Loading…</span></div>
+    </div>
+</section>
+
+<section class="favorite-cards-panel" id="favorite-cards-panel" aria-label="Favorite cards panel">
+    <div class="favorite-cards-header">
+        <h3 class="favorite-cards-title">Favorite Cards</h3>
+        <button type="button" class="toggle-panel-btn" id="toggle-cards-btn" aria-label="Toggle favorite cards panel" title="Collapse panel">
+            <svg class="chevron-up" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"/>
+            </svg>
+            <svg class="chevron-down" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        </button>
+    </div>
+    <div class="favorite-cards-content" id="favorite-cards-content">
+        <div class="favorite-cards-grid" id="favorite-cards"><span class="text-muted small">Loading…</span></div>
+    </div>
+    <div class="panel-resizer" id="panel-resizer"></div>
+</section>
+
+<div class="chat-layout">
+    <aside class="chat-sidebar" id="chat-sidebar">
+        <div class="session-header">
+            <h3>Recent Sessions</h3>
+        <button type="button" class="btn btn-sm btn-primary" id="new-session-btn" aria-label="Start new session" title="Start new session">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        </button>
+        </div>
+        <ul id="session-list"></ul>
+        <div class="chat-resizer" id="chat-resizer"></div>
+    </aside>
+    <div class="chat-main">
+        <div id="message-list" class="message-list"></div>
+        <div class="chat-input-area">
+            <div class="input-form-wrapper">
+                <form id="chat-form" action="#" method="post">
+                    {% csrf_token %}
+                    <div class="input-wrapper">
+                        <input type="text" id="prompt-input" class="form-control" placeholder="Ask a question or describe what you need..." name="prompt" autocomplete="off">
+                        <div class="input-actions">
+                            <button type="button" id="voice-btn" class="icon-btn" title="Voice input">
+                                <svg class="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                    <line x1="8" y1="23" x2="16" y2="23"/>
+                                </svg>
+                                <svg class="recording-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="display:none;">
+                                    <circle cx="12" cy="12" r="8"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+                </form>
+            </div>
+            
+            <!-- Discreet Agent and Model Selectors -->
+            <div class="input-selectors">
+                <select id="agent-selector" class="form-select-discreet" aria-label="Select agent">
+                    {% for agent in AVAILABLE_AGENTS %}
+                    <option value="{{ agent.id }}" {% if selected_agent == agent.id %}selected{% elif not selected_agent and agent.default %}selected{% endif %}>{{ agent.icon }} {{ agent.display_name }}</option>
+                    {% endfor %}
+                </select>
+                <select id="model-selector" class="form-select-discreet" aria-label="Select model">
+                    {% for model in AVAILABLE_MODELS %}
+                    <option value="{{ model.key }}" {% if model.default %}selected{% endif %}>{{ model.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Card Edit Modal -->
+<div class="modal fade" id="cardEditModal" tabindex="-1" aria-labelledby="cardEditModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="cardEditModalLabel">Edit Card</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="card-edit-form">
+          <input type="hidden" id="edit-card-id" value="">
+          <div class="mb-3">
+            <label for="edit-card-name" class="form-label fw-semibold">Title</label>
+            <input type="text" class="form-control" id="edit-card-name" placeholder="Card title" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit-card-description" class="form-label fw-semibold">Description</label>
+            <input type="text" class="form-control" id="edit-card-description" placeholder="Brief description">
+          </div>
+          <div class="mb-3">
+            <label for="edit-card-prompt" class="form-label fw-semibold">Prompt</label>
+            <textarea class="form-control" id="edit-card-prompt" rows="10" placeholder="Prompt text" required></textarea>
+            <div class="form-text">This is the text that will be sent to the agent when you click the card.</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="save-card-btn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/autocomplete.js' %}?t=1771364726"></script>
+<script src="{% static 'js/prompt-history.js' %}?t=1771364726"></script>
+<script src="{% static 'js/chat.js' %}?t=1772479026"></script>
+<script src="{% static 'js/voice-input.js' %}?t=1771364726"></script>
+<script src="{% static 'js/panel-resize.js' %}?t=1771364726"></script>
+<script src="{% static 'js/chat-resize.js' %}?t=1771715000"></script>
+{% endblock %}

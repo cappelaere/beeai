@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Agent Studio{% endblock %}
+
+{% block content %}
+<div class="studio-container">
+    <div class="page-header">
+        <h1>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <path d="M9 3v18"/>
+                <path d="M15 3v18"/>
+                <circle cx="9" cy="9" r="2"/>
+                <circle cx="15" cy="15" r="2"/>
+            </svg>
+            Agent Studio
+        </h1>
+        <p class="subtitle">Create custom AI agents with specialized skills and tools</p>
+    </div>
+    
+    <div class="studio-content">
+        <div class="create-agent-card">
+            <h2>Create New Agent</h2>
+            <form id="create-agent-form" onsubmit="handleCreateAgent(event)">
+                <div class="form-group">
+                    <label for="agent-name" class="form-label">Agent Name *</label>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        id="agent-name" 
+                        name="name"
+                        placeholder="e.g., Contract Analysis Agent"
+                        required>
+                    <small class="form-text">The display name for your agent</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="agent-id" class="form-label">Agent ID *</label>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        id="agent-id" 
+                        name="agent_id"
+                        pattern="[a-z][a-z0-9_]*"
+                        placeholder="e.g., contract_analysis"
+                        required>
+                    <small class="form-text">Lowercase letters, numbers, and underscores only (must start with letter)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="agent-icon" class="form-label">Icon Emoji *</label>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        id="agent-icon" 
+                        name="icon"
+                        placeholder="📝"
+                        maxlength="2"
+                        required>
+                    <small class="form-text">Single emoji character</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="agent-description" class="form-label">Description *</label>
+                    <textarea 
+                        class="form-control" 
+                        id="agent-description" 
+                        name="description"
+                        rows="3"
+                        placeholder="Brief description of what this agent does..."
+                        required></textarea>
+                    <small class="form-text">Short description for the agent collection page</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="agent-prompt" class="form-label">Skills Generation Prompt *</label>
+                    <textarea 
+                        class="form-control" 
+                        id="agent-prompt" 
+                        name="prompt"
+                        rows="8"
+                        placeholder="Describe the agent's capabilities, expertise, tools it should use, and how it should behave. This will be used to generate the agent's SKILLS.md file.
+
+Example:
+This agent specializes in contract analysis for government procurement. It should:
+- Analyze contract terms and conditions
+- Identify compliance requirements
+- Flag potential issues or red flags
+- Provide risk assessments
+- Use tools: search_contracts, analyze_clauses, check_compliance"
+                        required></textarea>
+                    <small class="form-text">Detailed description used to generate the agent's SKILLS.md file</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='{% url 'agents_list' %}'">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="create-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Create Agent
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="info-card">
+            <h3>What Gets Created</h3>
+            <p>When you create an agent, the following will be generated:</p>
+            <ul>
+                <li><strong>Agent Directory:</strong> <code>agents/&lt;agent_id&gt;/</code></li>
+                <li><strong>Configuration:</strong> <code>agents/&lt;agent_id&gt;/agent.py</code></li>
+                <li><strong>Skills Documentation:</strong> <code>agents/&lt;agent_id&gt;/SKILLS.md</code> (AI-generated)</li>
+                <li><strong>Registry Entry:</strong> Added to <code>agents.yaml</code></li>
+            </ul>
+            
+            <h3>After Creation</h3>
+            <p>Your agent will:</p>
+            <ul>
+                <li>Appear in the Agent Collection</li>
+                <li>Be available in the chat agent selector</li>
+                <li>Have access to standard tools</li>
+                <li>Have AI-generated skills documentation</li>
+            </ul>
+            
+            <h3>Tips</h3>
+            <ul>
+                <li>Choose a descriptive agent ID (can't be changed later)</li>
+                <li>Be specific in the skills prompt about the agent's domain expertise</li>
+                <li>Mention any specific tools or APIs the agent should use</li>
+                <li>You can edit the generated SKILLS.md file later</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="status-message" class="alert" style="display: none;"></div>
+</div>
+
+<style>
+.studio-container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.page-header h1 svg {
+    color: #2196f3;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.studio-content {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 2rem;
+}
+
+.create-agent-card,
+.info-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 2rem;
+}
+
+.create-agent-card h2,
+.info-card h3 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    color: #1a1a1a;
+}
+
+.info-card h3 {
+    font-size: 1.1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: #333;
+}
+
+.info-card h3:first-child {
+    margin-top: 0;
+}
+
+.info-card ul {
+    margin-bottom: 1.5rem;
+    padding-left: 1.5rem;
+}
+
+.info-card li {
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.form-text {
+    display: block;
+    margin-top: 0.25rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #dee2e6;
+}
+
+.form-actions button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.alert {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    max-width: 400px;
+    padding: 1rem 1.5rem;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 9999;
+}
+
+.alert.success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.alert.error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+
+.alert.info {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
+@media (max-width: 1024px) {
+    .studio-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .info-card {
+        order: -1;
+    }
+}
+
+@media (max-width: 768px) {
+    .studio-container {
+        padding: 1rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+}
+</style>
+
+<script>
+function showStatus(message, type) {
+    const statusEl = document.getElementById('status-message');
+    statusEl.textContent = message;
+    statusEl.className = 'alert ' + type;
+    statusEl.style.display = 'block';
+    
+    setTimeout(() => {
+        statusEl.style.display = 'none';
+    }, 5000);
+}
+
+function handleCreateAgent(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const createBtn = document.getElementById('create-btn');
+    const formData = new FormData(form);
+    
+    const data = {
+        name: formData.get('name'),
+        agent_id: formData.get('agent_id'),
+        icon: formData.get('icon'),
+        description: formData.get('description'),
+        prompt: formData.get('prompt')
+    };
+    
+    // Validate agent_id format
+    if (!/^[a-z][a-z0-9_]*$/.test(data.agent_id)) {
+        showStatus('Agent ID must start with a letter and contain only lowercase letters, numbers, and underscores', 'error');
+        return;
+    }
+    
+    // Disable button and show loading
+    createBtn.disabled = true;
+    createBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating...';
+    
+    showStatus('Creating agent... This may take a minute to generate the SKILLS.md file.', 'info');
+    
+    fetch('/api/agents/create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showStatus('Agent created successfully! Redirecting...', 'success');
+            setTimeout(() => {
+                window.location.href = '/agents/';
+            }, 1500);
+        } else {
+            showStatus('Error: ' + (data.error || 'Failed to create agent'), 'error');
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Create Agent';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showStatus('Failed to create agent: ' + error.message, 'error');
+        createBtn.disabled = false;
+        createBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Create Agent';
+    });
+}
+
+function getCsrfToken() {
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='));
+    return cookieValue ? cookieValue.split('=')[1] : '';
+}
+</script>
+{% endblock %}
