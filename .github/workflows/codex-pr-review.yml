@@ -17,8 +17,10 @@ jobs:
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.2' }}
     steps:
       - name: Check required secret
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+          if [ -z "$OPENAI_API_KEY" ]; then
             echo "OPENAI_API_KEY secret is required for Codex PR review." >&2
             exit 1
           fi
@@ -147,34 +149,61 @@ jobs:
           import os
           import pathlib
           import urllib.request
+          import urllib.error
+
+          def extract_responses_api_text(resp: dict) -> str:
+              """Collect assistant text from raw /v1/responses JSON (no SDK output_text helper)."""
+              # Some proxies or future API versions may expose a flat field
+              flat = resp.get("output_text")
+              if isinstance(flat, str) and flat.strip():
+                  return flat.strip()
+              parts: list[str] = []
+              for item in resp.get("output") or []:
+                  if not isinstance(item, dict):
+                      continue
+                  for block in item.get("content") or []:
+                      if not isinstance(block, dict):
+                          continue
+                      if block.get("type") in ("output_text", "text"):
+                          t = block.get("text")
+                          if isinstance(t, str) and t:
+                              parts.append(t)
+              return "\n".join(parts).strip()
 
           prompt = pathlib.Path("codex_review_prompt.txt").read_text()
           payload = {
-            "model": os.environ.get("OPENAI_MODEL", "gpt-5.2"),
-            "input": prompt,
+              "model": os.environ.get("OPENAI_MODEL", "gpt-5.2"),
+              "input": prompt,
           }
 
           request = urllib.request.Request(
-            "https://api.openai.com/v1/responses",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-              "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
-              "Content-Type": "application/json",
-            },
-            method="POST",
+              "https://api.openai.com/v1/responses",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
           )
 
-          with urllib.request.urlopen(request) as response:
-            body = json.loads(response.read().decode("utf-8"))
+          try:
+              with urllib.request.urlopen(request) as response:
+                  body = json.loads(response.read().decode("utf-8"))
+          except urllib.error.HTTPError as e:
+              err = e.read().decode("utf-8", errors="replace")
+              raise SystemExit(f"OpenAI API HTTP {e.code}: {err}") from e
 
-          output_text = body.get("output_text", "").strip()
+          output_text = extract_responses_api_text(body)
           if not output_text:
-            raise SystemExit("OpenAI response did not contain output_text.")
+              raise SystemExit(
+                  "OpenAI response contained no extractable text "
+                  "(expected output[].content[] with type output_text/text)."
+              )
 
           pathlib.Path("codex_review.md").write_text(
-            "<!-- codex-pr-review -->\n"
-            "## Codex Review\n\n"
-            f"{output_text}\n"
+              "<!-- codex-pr-review -->\n"
+              "## Codex Review\n\n"
+              f"{output_text}\n"
           )
           PY
 
