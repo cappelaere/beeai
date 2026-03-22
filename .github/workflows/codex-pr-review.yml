@@ -152,23 +152,38 @@ jobs:
           import urllib.error
 
           def extract_responses_api_text(resp: dict) -> str:
-              """Collect assistant text from raw /v1/responses JSON (no SDK output_text helper)."""
-              # Some proxies or future API versions may expose a flat field
-              flat = resp.get("output_text")
-              if isinstance(flat, str) and flat.strip():
-                  return flat.strip()
+              """Aggregate assistant-visible text from raw /v1/responses JSON.
+
+              The wire JSON has no top-level ``output_text``; that field exists only as
+              a convenience property on SDK objects (see OpenAI Python ``Response.output_text``).
+              Match SDK behavior: only ``output`` items with ``type == "message"``, and
+              ``content`` blocks of type ``output_text`` (plus ``refusal`` / legacy ``text``).
+              """
+              err = resp.get("error")
+              if isinstance(err, dict) and err.get("message"):
+                  raise SystemExit(f"OpenAI API error: {err.get('message')}")
+
               parts: list[str] = []
               for item in resp.get("output") or []:
-                  if not isinstance(item, dict):
+                  if not isinstance(item, dict) or item.get("type") != "message":
                       continue
                   for block in item.get("content") or []:
                       if not isinstance(block, dict):
                           continue
-                      if block.get("type") in ("output_text", "text"):
+                      btype = block.get("type")
+                      if btype == "output_text":
                           t = block.get("text")
                           if isinstance(t, str) and t:
                               parts.append(t)
-              return "\n".join(parts).strip()
+                      elif btype == "refusal":
+                          r = block.get("refusal")
+                          if isinstance(r, str) and r:
+                              parts.append(r)
+                      elif btype == "text":
+                          t = block.get("text")
+                          if isinstance(t, str) and t:
+                              parts.append(t)
+              return "".join(parts).strip()
 
           prompt = pathlib.Path("codex_review_prompt.txt").read_text()
           payload = {
@@ -197,7 +212,8 @@ jobs:
           if not output_text:
               raise SystemExit(
                   "OpenAI response contained no extractable text "
-                  "(expected output[].content[] with type output_text/text)."
+                  "(expected output[] items with type 'message' and "
+                  "content[] blocks of type output_text, refusal, or text)."
               )
 
           pathlib.Path("codex_review.md").write_text(
