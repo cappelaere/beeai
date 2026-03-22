@@ -172,8 +172,7 @@ Handler rules:
 
 - handlers must be instance methods on the executor class
 - handlers must accept `state` as the primary input
-- handlers may return `None`
-- handlers may return a BPMN task id string to override the next step in limited cases
+- handlers may return `None` or other values for logging; **routing follows the BPMN diagram** (sequence flow, exclusive gateway conditions, parallel fork/join, etc.)—do not rely on return values to pick the next task
 - helper methods are fine, but only bound handlers are invoked by the BPMN engine
 
 **Required state contract**
@@ -205,7 +204,7 @@ The BPMN diagram must include:
 - valid sequence flow connections
 - task ids that match entries in `bpmn-bindings.yaml`
 
-For the current engine, diagrams should be designed as **linear / single-path** unless you are intentionally using the limited handler-return override behavior.
+The runtime supports a **documented subset** of BPMN 2.0: single-path flows, **exclusive** and **parallel** gateways (with save-time topology checks), **interrupting** boundary timer/error on tasks, **intermediate** timer/message catch (with resume semantics), **embedded subprocess** (single level, no nesting), task retries, and workflow-level cancel/timeout. Unsupported shapes are rejected at save or fail at runtime with a clear error—see [BPMN_ENGINE_REVIEW.md](../../docs/architecture/BPMN_ENGINE_REVIEW.md) (top sections and §2).
 
 **Required bindings contract**
 
@@ -278,12 +277,12 @@ Before marking a workflow ready, confirm:
 
 For engine limitations and architecture details, see [BPMN_ENGINE_REVIEW.md](../../docs/architecture/BPMN_ENGINE_REVIEW.md).
 
-**Limitations (v1 engine)**
+**Limitations and unsupported BPMN**
 
-- Execution is **linear / single-path**. Multiple outgoing flows from a gateway are not fully evaluated; the engine may stop or use a handler return override if implemented.
-- No full BPMN semantics in v1: no native exclusive gateway condition evaluation, no true parallel gateway fork/join, no event-node or subprocess semantics.
-- For future branching semantics and runtime evolution, see [BPMN_V2_PLAN.md](../../docs/architecture/BPMN_V2_PLAN.md).
-- Consolidation status: [BPMN_CONSOLIDATION_TODOS.md](../../docs/architecture/BPMN_CONSOLIDATION_TODOS.md).
+- **Not full BPMN 2.0**: many constructs are unsupported or only partially supported (e.g. callActivity, nested embedded subprocess, event subprocess, non-interrupting boundaries, intermediate catch with **multiple active parallel tokens**—see PAR-015 in [BPMN_ENGINE_REVIEW.md](../../docs/architecture/BPMN_ENGINE_REVIEW.md)).
+- **Parallel regions**: fork/join correlation and branch shapes are constrained by `validate_bpmn_for_save` and runtime checks; nested parallel forks on a branch are rejected.
+- **Handler returns** do not override diagram routing.
+- Roadmap and longer-term semantics: [BPMN_V2_PLAN.md](../../docs/architecture/BPMN_V2_PLAN.md). Consolidation status: [BPMN_CONSOLIDATION_TODOS.md](../../docs/architecture/BPMN_CONSOLIDATION_TODOS.md).
 
 ---
 

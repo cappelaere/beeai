@@ -1,0 +1,222 @@
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.2' }}
+    steps:
+      - name: Check required secret
+        run: |
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "OPENAI_API_KEY secret is required for Codex PR review." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect PR metadata and linked issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+              }
+            );
+
+            const prContext = {
+              number: pr.number,
+              title: pr.title,
+              body: pr.body || "",
+              base: pr.base.ref,
+              head: pr.head.ref,
+              changed_files: files.map((f) => f.filename),
+            };
+            fs.writeFileSync("pr_context.json", JSON.stringify(prContext, null, 2));
+
+            const body = pr.body || "";
+            const issueMatch =
+              body.match(/(?:^|\n)-\s*Issue:\s*#(\d+)\b/i) ||
+              body.match(/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i);
+
+            let issueContext = {
+              number: null,
+              title: "No linked issue found.",
+              body: "PR body did not include a parseable issue reference.",
+            };
+
+            if (issueMatch) {
+              const issue_number = Number(issueMatch[1]);
+              const issue = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number,
+              });
+              issueContext = {
+                number: issue_number,
+                title: issue.data.title,
+                body: issue.data.body || "",
+              };
+            }
+
+            fs.writeFileSync("issue_context.json", JSON.stringify(issueContext, null, 2));
+
+      - name: Build diff snapshot
+        run: |
+          git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
+          git diff --unified=2 "origin/${{ github.event.pull_request.base.ref }}...HEAD" > pr.diff
+
+      - name: Build Codex review prompt
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          root = pathlib.Path(".")
+          template = (root / ".github" / "prompts" / "codex_pr_review.md").read_text()
+          pr = json.loads((root / "pr_context.json").read_text())
+          issue = json.loads((root / "issue_context.json").read_text())
+          diff = (root / "pr.diff").read_text()
+
+          def extract_section(markdown: str, heading: str) -> str:
+            pattern = re.compile(
+                rf"^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)",
+                re.MULTILINE | re.DOTALL,
+            )
+            match = pattern.search(markdown or "")
+            return match.group(1).strip() if match else ""
+
+          approved_plan = extract_section(pr.get("body", ""), "Approved Plan")
+          pr_summary = extract_section(pr.get("body", ""), "What changed") or (pr.get("body", "")[:4000])
+          changed_files = "\n".join(f"- {path}" for path in pr.get("changed_files", [])) or "- None"
+
+          max_diff_chars = 120000
+          if len(diff) > max_diff_chars:
+            diff = diff[:max_diff_chars] + "\n\n[diff truncated for review]"
+
+          replacements = {
+            "{{ISSUE_TITLE}}": issue.get("title", ""),
+            "{{ISSUE_BODY}}": issue.get("body", ""),
+            "{{APPROVED_PLAN}}": approved_plan or "No approved plan section found in the PR body.",
+            "{{PR_NUMBER}}": str(pr.get("number", "")),
+            "{{PR_TITLE}}": pr.get("title", ""),
+            "{{BASE_BRANCH}}": pr.get("base", ""),
+            "{{HEAD_BRANCH}}": pr.get("head", ""),
+            "{{PR_SUMMARY}}": pr_summary or "No PR summary provided.",
+            "{{CHANGED_FILES}}": changed_files,
+            "{{PR_DIFF}}": diff,
+          }
+
+          prompt = template
+          for key, value in replacements.items():
+            prompt = prompt.replace(key, value)
+
+          (root / "codex_review_prompt.txt").write_text(prompt)
+          PY
+
+      - name: Request Codex review from OpenAI
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          prompt = pathlib.Path("codex_review_prompt.txt").read_text()
+          payload = {
+            "model": os.environ.get("OPENAI_MODEL", "gpt-5.2"),
+            "input": prompt,
+          }
+
+          request = urllib.request.Request(
+            "https://api.openai.com/v1/responses",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+              "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+              "Content-Type": "application/json",
+            },
+            method="POST",
+          )
+
+          with urllib.request.urlopen(request) as response:
+            body = json.loads(response.read().decode("utf-8"))
+
+          output_text = body.get("output_text", "").strip()
+          if not output_text:
+            raise SystemExit("OpenAI response did not contain output_text.")
+
+          pathlib.Path("codex_review.md").write_text(
+            "<!-- codex-pr-review -->\n"
+            "## Codex Review\n\n"
+            f"{output_text}\n"
+          )
+          PY
+
+      - name: Create or update PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const body = fs.readFileSync("codex_review.md", "utf8");
+            const marker = "<!-- codex-pr-review -->";
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner,
+                repo,
+                issue_number: pull_number,
+                per_page: 100,
+              }
+            );
+
+            const existing = comments.find(
+              (comment) =>
+                comment.user.type === "Bot" &&
+                comment.body &&
+                comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body,
+              });
+            }

@@ -2,33 +2,40 @@
 
 **Status:** Proposed architecture and implementation design.  
 **Audience:** Workflow engine maintainers, Workflow Studio maintainers, backend developers.  
-**Scope:** Expand the current BPMN v1 engine from linear diagram-driven execution into a safer, richer BPMN runtime with true branching semantics, better persistence, and stronger operational controls.
+**Scope:** Extend the **current** BPMN runtime (already token-based with parallel fork/join, exclusive gateways, boundaries, intermediate catch, embedded subprocess phase 1, cancel/timeout, retries—see [BPMN_ENGINE_REVIEW.md](./BPMN_ENGINE_REVIEW.md)) toward **fuller BPMN 2.0** semantics, stronger operational controls, and clearer evolution paths.
 
 ---
 
 ## 1. Summary
 
-The current BPMN engine is a strong v1 for **linear, single-path workflows**. It is intentionally limited: it can traverse a BPMN diagram, invoke bound handlers, pause/resume on human tasks, and update UI progress. It does **not** yet provide full BPMN 2.0 execution semantics.
+Today’s engine is **BPMN-only** and supports a **documented subset** of BPMN 2.0 (not merely linear diagrams). It remains **not** a complete BPMN 2.0 execution environment: unsupported constructs and edge cases are called out in the engine review and save-time validation.
 
-V2 upgrades the engine from:
+V2 (this spec) targets **further** upgrades beyond the current baseline, for example:
+
+- deeper coverage of BPMN constructs and stricter operational guarantees
+- richer failure/retry policies and observability
+- optional features still called out as future work in the review (e.g. some handler-override semantics, per-task timeouts, nested parallel regions)
+
+Historical contrast (pre–parallel-gateway era)—the engine used to be conceptualized as:
 
 - one current task
 - one path through the graph
-- lightweight handler-return overrides
 
-to:
+The **current** baseline already includes:
 
-- a **token-based execution runtime**
+- a **token-based** execution model (multi-token after parallel fork)
 - **exclusive gateway** condition evaluation
-- **parallel gateway** fork/join execution
-- **timeout**, **cancellation**, and **retry** policies
-- richer persisted engine state and better failure reporting
+- **parallel gateway** fork/join (with save-time correlation rules)
+- workflow-level **timeout**, **cancellation**, and **task retry** policies
+- richer persisted engine state (see `normalize_engine_state`)
 
-This spec defines the intended behavior, architecture boundaries, persistence model, rollout plan, and the main files that should change.
+This spec defines additional intended behavior, architecture boundaries, persistence evolution, rollout plan, and the main files that should change as the runtime moves toward fuller BPMN 2.0 coverage.
 
 ---
 
 ## 2. Goals
+
+**Note:** The **current** runtime already implements exclusive and parallel gateways (with constraints), token persistence, pause/resume across branches, workflow-level cancel/timeout, task retries, and BPMN run diagnostics. The goals below describe **V2 evolution**—tightening semantics, extending BPMN coverage, and operational hardening—not a from-scratch engine.
 
 ### Primary goals
 

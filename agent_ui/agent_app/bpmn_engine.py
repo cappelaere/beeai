@@ -631,8 +631,17 @@ def _get_bindings_and_bpmn(workflow_id: str) -> tuple[dict[str, Any], dict[str, 
 
 def can_run_with_bpmn_engine(workflow_id: str) -> bool:
     """
-    Return True if this workflow has BPMN, bindings, and a state class so it can
-    be run with the BPMN engine (diagram-driven execution).
+    Cheap readiness check: True if the workflow looks BPMN-runnable before a run.
+
+    Uses ``get_workflow_context`` to verify BPMN XML is present, bindings normalize
+    to a non-empty ``serviceTasks`` map, the registry exposes a ``state_class_name``,
+    and the first executable element after the start is either a bound service task
+    or an allowed intermediate timer/message catch (same rules as run startup).
+
+    The runner, WebSocket consumer, and tools call this to **fail fast** with a clear
+    message. It is **not** a full static validator: invalid diagrams can still fail
+    later in ``run_bpmn_workflow`` or at save time. The runtime is **BPMN-only**—there
+    is no legacy path when this returns False.
     """
     try:
         context = get_workflow_context(workflow_id)
