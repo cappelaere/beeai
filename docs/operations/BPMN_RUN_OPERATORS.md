@@ -38,3 +38,5 @@ When branches must meet at a **parallel join gateway**, the engine records **how
 ## Where this is implemented
 
 Run detail builds a **textual timeline** and **diagnostics panel** from persisted `progress_data` (no change to engine semantics). See [BPMN engine review](../architecture/BPMN_ENGINE_REVIEW.md) for architecture.
+
+For **staging/production validation** checklists (run IDs, completion / pause / UI / parallel join), see [BPMN_STAGING_VALIDATION.md](./BPMN_STAGING_VALIDATION.md).
