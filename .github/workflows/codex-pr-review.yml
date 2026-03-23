@@ -16,21 +16,28 @@ jobs:
     env:
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.2' }}
     steps:
-      - name: Check required secret
+      # Succeed without running review when the secret is unset (fork PRs, or repo not
+      # configured yet) so a required "Codex PR Review" check does not block merges.
+      - name: Gate (OPENAI_API_KEY)
+        id: codex_gate
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "OPENAI_API_KEY secret is required for Codex PR review." >&2
-            exit 1
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "run_review=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_review=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Codex PR review skipped: add the OPENAI_API_KEY repository secret to enable automated reviews."
           fi
 
       - name: Check out repository
+        if: steps.codex_gate.outputs.run_review == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Collect PR metadata and linked issue
+        if: steps.codex_gate.outputs.run_review == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -87,11 +94,13 @@ jobs:
             fs.writeFileSync("issue_context.json", JSON.stringify(issueContext, null, 2));
 
       - name: Build diff snapshot
+        if: steps.codex_gate.outputs.run_review == 'true'
         run: |
           git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
           git diff --unified=2 "origin/${{ github.event.pull_request.base.ref }}...HEAD" > pr.diff
 
       - name: Build Codex review prompt
+        if: steps.codex_gate.outputs.run_review == 'true'
         run: |
           python - <<'PY'
           import json
@@ -120,27 +129,39 @@ jobs:
           if len(diff) > max_diff_chars:
             diff = diff[:max_diff_chars] + "\n\n[diff truncated for review]"
 
-          replacements = {
-            "{{ISSUE_TITLE}}": issue.get("title", ""),
-            "{{ISSUE_BODY}}": issue.get("body", ""),
-            "{{APPROVED_PLAN}}": approved_plan or "No approved plan section found in the PR body.",
-            "{{PR_NUMBER}}": str(pr.get("number", "")),
-            "{{PR_TITLE}}": pr.get("title", ""),
-            "{{BASE_BRANCH}}": pr.get("base", ""),
-            "{{HEAD_BRANCH}}": pr.get("head", ""),
-            "{{PR_SUMMARY}}": pr_summary or "No PR summary provided.",
-            "{{CHANGED_FILES}}": changed_files,
-            "{{PR_DIFF}}": diff,
+          # Single-pass substitution: sequential str.replace() would re-expand
+          # placeholder-shaped text inside user-controlled fields (e.g. {{PR_DIFF}} in issue body).
+          values = {
+            "ISSUE_TITLE": issue.get("title", ""),
+            "ISSUE_BODY": issue.get("body", ""),
+            "APPROVED_PLAN": approved_plan or "No approved plan section found in the PR body.",
+            "PR_NUMBER": str(pr.get("number", "")),
+            "PR_TITLE": pr.get("title", ""),
+            "BASE_BRANCH": pr.get("base", ""),
+            "HEAD_BRANCH": pr.get("head", ""),
+            "PR_SUMMARY": pr_summary or "No PR summary provided.",
+            "CHANGED_FILES": changed_files,
+            "PR_DIFF": diff,
           }
+          placeholder_re = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
 
-          prompt = template
-          for key, value in replacements.items():
-            prompt = prompt.replace(key, value)
+          def substitute_template(t: str) -> str:
+            def repl(m):
+              name = m.group(1)
+              if name not in values:
+                return m.group(0)
+              return values[name]
+
+            return placeholder_re.sub(repl, t)
+
+          prompt = substitute_template(template)
 
           (root / "codex_review_prompt.txt").write_text(prompt)
           PY
 
       - name: Request Codex review from OpenAI
+        if: steps.codex_gate.outputs.run_review == 'true'
+        id: codex_review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -148,6 +169,7 @@ jobs:
           import json
           import os
           import pathlib
+          import sys
           import urllib.request
           import urllib.error
 
@@ -205,25 +227,65 @@ jobs:
               with urllib.request.urlopen(request) as response:
                   body = json.loads(response.read().decode("utf-8"))
           except urllib.error.HTTPError as e:
-              err = e.read().decode("utf-8", errors="replace")
-              raise SystemExit(f"OpenAI API HTTP {e.code}: {err}") from e
+              raw = e.read().decode("utf-8", errors="replace")
+              message = f"OpenAI API HTTP {e.code}"
+              try:
+                  err = json.loads(raw)
+                  api_error = err.get("error") or {}
+                  detail = api_error.get("message")
+                  code = api_error.get("code")
+                  if detail:
+                      message = f"{message}: {detail}"
+                  if code:
+                      message = f"{message} (code: {code})"
+              except json.JSONDecodeError:
+                  if raw.strip():
+                      message = f"{message}: {raw.strip()}"
+
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI API request failed.\n\n"
+                  f"- Error: `{message}`\n"
+                  "- Action: check API billing/quota, secret configuration, and retry the workflow.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              print(message, file=sys.stderr)
+              raise SystemExit(0) from e
+          except urllib.error.URLError as e:
+              message = f"OpenAI API connection error: {e.reason}"
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI API could not be reached.\n\n"
+                  f"- Error: `{message}`\n"
+                  "- Action: retry the workflow after confirming outbound network access and API availability.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              print(message, file=sys.stderr)
+              raise SystemExit(0) from e
 
           output_text = extract_responses_api_text(body)
           if not output_text:
-              raise SystemExit(
-                  "OpenAI response contained no extractable text "
-                  "(expected output[] items with type 'message' and "
-                  "content[] blocks of type output_text, refusal, or text)."
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI response did not contain extractable review text.\n\n"
+                  "- Action: inspect the workflow logs and retry.\n"
               )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              raise SystemExit(0)
 
           pathlib.Path("codex_review.md").write_text(
               "<!-- codex-pr-review -->\n"
               "## Codex Review\n\n"
               f"{output_text}\n"
           )
+          pathlib.Path("codex_review_status.txt").write_text("ok\n")
           PY
 
       - name: Create or update PR comment
+        if: steps.codex_gate.outputs.run_review == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -245,7 +307,7 @@ jobs:
 
             const existing = comments.find(
               (comment) =>
-                comment.user.type === "Bot" &&
+                comment.user?.type === "Bot" &&
                 comment.body &&
                 comment.body.includes(marker)
             );
@@ -265,3 +327,10 @@ jobs:
                 body,
               });
             }
+
+      - name: Surface degraded review state
+        if: steps.codex_gate.outputs.run_review == 'true'
+        run: |
+          if [ -f codex_review_status.txt ] && [ "$(cat codex_review_status.txt)" = "degraded" ]; then
+            echo "Codex PR review completed in degraded mode; see PR comment for details."
+          fi
