@@ -180,10 +180,11 @@ jobs:
               a convenience property on SDK objects (see OpenAI Python ``Response.output_text``).
               Match SDK behavior: only ``output`` items with ``type == "message"``, and
               ``content`` blocks of type ``output_text`` (plus ``refusal`` / legacy ``text``).
+
+              Top-level ``error`` objects are handled by the caller (degraded comment + exit 0).
               """
-              err = resp.get("error")
-              if isinstance(err, dict) and err.get("message"):
-                  raise SystemExit(f"OpenAI API error: {err.get('message')}")
+              if not isinstance(resp, dict):
+                  return ""
 
               parts: list[str] = []
               for item in resp.get("output") or []:
@@ -225,7 +226,7 @@ jobs:
 
           try:
               with urllib.request.urlopen(request) as response:
-                  body = json.loads(response.read().decode("utf-8"))
+                  raw_body = response.read().decode("utf-8")
           except urllib.error.HTTPError as e:
               raw = e.read().decode("utf-8", errors="replace")
               message = f"OpenAI API HTTP {e.code}"
@@ -264,6 +265,37 @@ jobs:
               pathlib.Path("codex_review_status.txt").write_text("degraded\n")
               print(message, file=sys.stderr)
               raise SystemExit(0) from e
+
+          try:
+              body = json.loads(raw_body)
+          except json.JSONDecodeError as e:
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI response was not valid JSON.\n\n"
+                  f"- Error: `{e}`\n"
+                  "- Action: inspect the workflow logs and retry.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              print(str(e), file=sys.stderr)
+              raise SystemExit(0) from e
+
+          api_err = body.get("error") if isinstance(body, dict) else None
+          if isinstance(api_err, dict) and api_err.get("message"):
+              message = str(api_err.get("message"))
+              code = api_err.get("code")
+              if code:
+                  message = f"{message} (code: {code})"
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI API returned an error in the response body.\n\n"
+                  f"- Error: `{message}`\n"
+                  "- Action: check API billing/quota, secret configuration, and retry the workflow.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              print(message, file=sys.stderr)
+              raise SystemExit(0)
 
           output_text = extract_responses_api_text(body)
           if not output_text:
