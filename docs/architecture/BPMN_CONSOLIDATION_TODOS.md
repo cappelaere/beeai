@@ -10,8 +10,9 @@ See **[BPMN_ENGINE_REVIEW.md](./BPMN_ENGINE_REVIEW.md)** §6 for current-state r
 
 ## Phase 1: Validate engine
 
-- [ ] Run BPMN-ready workflows (e.g. bi_weekly_report) in production/staging; confirm completion, pause/resume, run-detail UI
-- [ ] Fix any engine or runner bugs found
+- [ ] Run BPMN-ready workflows (e.g. bi_weekly_report) in production/staging; confirm completion, pause/resume, run-detail UI  
+  - **Issue #7 — procedure and matrix:** [BPMN_STAGING_VALIDATION.md](../operations/BPMN_STAGING_VALIDATION.md) lists catalog workflows, data prerequisites, automated integration coverage (`test_workflow_runner_integration.py`), parallel/join strategy (`runner_parallel_fj_test` + tests), and **empty staging/production tables** for operators to fill with run IDs. **Remaining gap:** complete those tables in a real deployment, then check this item off.
+- [x] Fix any engine or runner bugs found — **none found** during Issue #7 doc work; file new issues if staging exercises reveal defects
 - [x] Document “BPMN-engine-ready workflow” contract in developer guide ([workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md) — BPMN-ready workflow contract)
 
 ## Phase 2: Migrate workflows to BPMN-only
