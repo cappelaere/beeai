@@ -6,101 +6,104 @@ This document records **how** to validate BPMN-only workflow execution outside l
 
 | Field | Value (fill when validating) |
 |-------|------------------------------|
-| **Environment** | e.g. staging URL or production (name only in git; no secrets) |
-| **Date** | |
-| **Operator** | |
-| **App version / commit** | e.g. git SHA deployed |
+| **Environment** | **Local full-stack (Django test DB, in-memory SQLite)** — same application code paths as deployment; not a hosted staging URL. |
+| **Date** | 2026-03-23 |
+| **Operator** | Cursor agent (automated) |
+| **App version / commit** | Branch `chore/7-bpmn-staging-validation` / commit at time of run (see git); validation logs below from post-doc run. |
 
 **Catalog-visible BPMN workflows** (default registry list; `hide_from_catalog` workflows are excluded from the Workflows UI):
 
 | Workflow ID | Notes / data prerequisites |
 |-------------|----------------------------|
-| `bidder_onboarding` | Inputs: `bidder_name`, `email`, `phone`, `property_id`, `age_accepted`, `terms_accepted`. External SAM/OFAC behavior depends on environment configuration. |
+| `bidder_onboarding` | Inputs: `bidder_name`, `property_id`, `registration_data` with `email`, `phone`, `terms_accepted`, `age_accepted`. |
 | `property_due_diligence` | Requires a valid `property_id` for your environment’s data sources. |
 | `bi_weekly_report` | Requires `start_date` and `end_date` (report window); uses portfolio/agents as configured. |
-| `dap_report` | Requires `report_date`; optional `lookback_days`. DAP agent availability affects outcome. |
+| `dap_report` | Requires `report_date`; optional `lookback_days`. GRES / agent stack affects retrieval path. |
 
 Confirm each workflow appears under **Workflows** in the UI before treating the environment as ready.
 
+**Hosted staging/production:** No URL was available in-repo for this pass. Re-run section 3 against your deployed host when credentials are ready; paste new run IDs and outcomes below or in a follow-up PR.
+
 ## 2. Automated baseline (local / CI)
 
-These tests exercise the **same** runner and persistence paths as the app (`execute_workflow_run`, `resume_bpmn_after_pause`, `progress_data`, fork/join). They do **not** replace staging UI validation.
+These tests exercise the **same** runner and persistence paths as the app (`execute_workflow_run`, `resume_bpmn_after_pause`, `progress_data`, fork/join). They do **not** replace hosted staging UI validation.
 
 From repo root (with Django test DB available and no other process holding `agent_ui/db.sqlite3`):
 
 ```bash
-cd agent_ui && ../venv/bin/python -m pytest agent_app/tests/test_workflow_runner_integration.py -q
+cd agent_ui && ../venv/bin/python manage.py test agent_app.tests.test_workflow_runner_integration --settings=agent_ui.settings -v 1
 ```
 
-Coverage highlights (see file for full list):
+**Result (2026-03-23):** `Ran 17 tests` — **OK** (pause/resume, retry, cancel, timeout, parallel fork/join, message catch).
+
+**Optional product workflow smoke** (same test DB; hits real handlers; **off by default** so CI stays fast):
+
+```bash
+cd agent_ui && ISSUE7_PRODUCT_SMOKE=1 ../venv/bin/python manage.py test \
+  agent_app.tests.test_issue7_product_workflows --settings=agent_ui.settings -v 2
+```
+
+Coverage highlights (see `test_workflow_runner_integration.py` for full list):
 
 - **`runner_integration_test`** — pause for human task, resume, completed steps, failure / retry metadata.
 - **`runner_parallel_fj_test`** — parallel fork/join completion, pause before join + resume, pending joins, branch failure, cancel, timeout scenarios.
 - **`par015_message_runner`** — intermediate message catch + resume.
 
-Product workflows (`dap_report`, `bi_weekly_report`, etc.) are not the subject of this module; validate them in the matrix below in a real deployment.
-
 ## 3. Staging / production validation matrix
 
-For each workflow, run from the **Workflows** UI (or equivalent API), then open **run detail**. Record **run id** from the UI or URL.
+For each workflow, runs below used **`execute_workflow_run`** on the **Django test database** (not the WebSocket entrypoint). **Run-detail UI** was checked via HTTP `GET /workflows/runs/<run_id>/` in the same tests (anonymous session user id 9): response **200** and HTML contained BPMN diagram / operator markers (`workflow-diagram-bpmn` or “BPMN diagram” copy).
 
 ### 3.1 Completion (happy path)
 
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
-|---------------|--------|--------------------|-------|
-| `dap_report` | | | |
-| `bi_weekly_report` | | | |
-| `property_due_diligence` | | | |
-| `bidder_onboarding` | | | |
+|-------------|--------|--------------------|-------|
+| `dap_report` | `121edda3` | **Fail** | Run ends **failed**: exclusive gateway `Gateway_1` has no matching condition after GRES retrieval (see §5). |
+| `bi_weekly_report` | `f8d08b78` | **Pass** | **Completed**; executive brief path exercised with seeded property data in test DB. |
+| `property_due_diligence` | `9bcc0d48` | **Pass** | **Completed**; parallel research + report handlers with simulated GRES-style data. |
+| `bidder_onboarding` | `494034f4` | **Fail** | Run ends **failed** at `Gateway_SAM_Decision` (no matching condition / default) after successful `validate_input` (see §5). |
 
 ### 3.2 Pause / resume
 
-Use a workflow that reaches **Waiting for task** (human step). Confirm resume continues from the documented task / resume point.
-
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
-|---------------|--------|--------------------|-------|
-| | | | |
+|-------------|--------|--------------------|-------|
+| `runner_integration_test` | (see logs) | **Pass** | Covered by `test_workflow_runner_integration` — `waiting_for_task`, resume, completion. |
+| `runner_parallel_fj_test` | (see logs) | **Pass** | Pause before join + resume + completion covered in same suite. |
+
+Product workflows in this pass did not reach a stable **waiting_for_task** state for manual pause testing; follow-up on staging with a human-task path if required.
 
 ### 3.3 Run-detail UI (progress, current / completed nodes)
 
-Compare timeline and diagnostics to [BPMN_RUN_OPERATORS.md](./BPMN_RUN_OPERATORS.md).
-
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
-|---------------|--------|--------------------|-------|
-| | | | |
+|-------------|--------|--------------------|-------|
+| `dap_report` | `121edda3` | **Pass** | Failed run still rendered run-detail with BPMN markers (diagnostics for failed BPMN run). |
+| `bi_weekly_report` | `f8d08b78` | **Pass** | Completed run; BPMN UI markers present. |
+| `property_due_diligence` | `9bcc0d48` | **Pass** | Completed run; BPMN UI markers present. |
+| `bidder_onboarding` | `494034f4` | **Pass** | Failed run; BPMN UI markers present. |
 
 ### 3.4 Failure presentation (controlled)
 
-Prefer invalid inputs, sandbox data, or a non-production environment. Capture **failed node** and message when applicable.
-
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
-|---------------|--------|--------------------|-------|
-| | | | |
+|-------------|--------|--------------------|-------|
+| `bidder_onboarding` | `494034f4` | **Pass** | **Failed** with engine error text in logs; run-detail page served for post-mortem review. |
+| `dap_report` | `121edda3` | **Pass** | **Failed** at gateway after agent step; same run-detail behavior. |
 
 ## 4. Parallel fork / join (UI vs automated)
 
-**Repository fact:** The only committed BPMN with parallel gateways is **`runner_parallel_fj_test`**, which sets `hide_from_catalog: true` and does not appear on the default Workflows list.
-
-**Chosen validation method for fork/join engine + persistence:**
-
-1. **Primary:** Automated tests in `agent_app/tests/test_workflow_runner_integration.py` (`RunnerParallelFjIntegrationTests`).
-2. **Optional in a deployed environment:** Start `runner_parallel_fj_test` via internal API or temporarily expose it (e.g. staging-only branch with `hide_from_catalog: false`) strictly for validation—then restore.
-
-Record here if a **live UI** parallel run was performed:
+**Repository fact:** The only committed BPMN with parallel gateways is **`runner_parallel_fj_test`**, which sets `hide_from_catalog: true`.
 
 | Method | Environment | Run ID | Pass / Fail / Skip | Notes |
 |--------|-------------|--------|--------------------|-------|
-| Integration tests only | CI / local | N/A | | |
-| Live UI or API | | | | |
+| Integration tests | Django test DB | N/A | **Pass** | `manage.py test …test_workflow_runner_integration` — fork/join, pending joins, failures, cancel, timeout. |
+| Product parallel research | Django test DB | `9bcc0d48` | **Pass** | `property_due_diligence` uses parallel subprocess pattern in handlers; run **completed** (not the same as BPMN parallel gateway tokens, but exercises multi-branch persistence). |
+| Live UI (`runner_parallel_fj_test`) | — | — | **Skip** | Hidden from catalog; use API or temporary catalog flag on staging if UI proof is required. |
 
 ## 5. Bugs and follow-ups
 
-If a defect is found during real-environment runs, file a **new GitHub issue** with run id, workflow id, expected vs actual, and screenshots. Link it from this section when updating the doc after triage.
-
 | Issue | Summary |
 |-------|---------|
-| | |
+| [#9](https://github.com/cappelaere/beeai/issues/9) | **`bidder_onboarding` / `dap_report`:** Exclusive gateways **`Gateway_SAM_Decision`** and **`Gateway_1`** — no matching condition / default after handler transitions (runs `494034f4`, `121edda3`). Track fix and BPMN updates there. |
+| **Fixed in this branch** | **`dap_report`:** `import agent_ui.agent_runner` failed when `sys.path` prioritized `agent_ui/` (inner package shadowed outer project package). Resolved by loading `agent_runner` via `importlib` from repo-relative path (`workflows/dap_report/workflow.py`). |
 
 ---
 
-**Status:** Automated baseline is defined above. **Staging/production table rows are intentionally left for operators** to fill after exercises. When those rows are completed and any bugs are filed or fixed, update [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md) Phase 1 accordingly.
+**Status:** Local full-stack validation **completed** for Issue #7 on 2026-03-23. Hosted staging/production should still run the same matrices when a deployment URL is available. When hosted rows are filled, optionally narrow Phase 1 wording in [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md).
