@@ -10,9 +10,9 @@ See **[BPMN_ENGINE_REVIEW.md](./BPMN_ENGINE_REVIEW.md)** §6 for current-state r
 
 ## Phase 1: Validate engine
 
-- [x] Run BPMN-ready workflows (e.g. bi_weekly_report) in production/staging; confirm completion, pause/resume, run-detail UI  
-  - **Issue #7 — completed (local full-stack, 2026-03-23):** [BPMN_STAGING_VALIDATION.md](../operations/BPMN_STAGING_VALIDATION.md) records Django test-DB runs, run IDs, integration suite (17 tests OK), run-detail HTTP checks, and **defects** (`bidder_onboarding` / `dap_report` exclusive gateways). **Optional follow-up:** repeat matrices on a **hosted** staging URL when available (credentials not in-repo).
-- [x] Fix any engine or runner bugs found — **none found** during Issue #7 doc work; file new issues if staging exercises reveal defects
+- [ ] Run BPMN-ready workflows (e.g. bi_weekly_report) in **production/staging**; confirm completion, pause/resume, run-detail UI  
+  - **Issue #7 — partial only:** [BPMN_STAGING_VALIDATION.md](../operations/BPMN_STAGING_VALIDATION.md) holds **local** notes (Django **test** DB, `execute_workflow_run`, optional diagnostic tests). That is **not** hosted staging/production validation and **does not** close this checkbox. Runner integration tests (`test_workflow_runner_integration`, 17 tests) cover engine mechanics, not deploy sign-off.
+- [ ] Fix any engine or runner bugs found — **open:** [issue #9](https://github.com/cappelaere/beeai/issues/9) (product BPMN exclusive-gateway routing for `bidder_onboarding` / `dap_report`); `dap_report` agent import path hardening on branch
 - [x] Document “BPMN-engine-ready workflow” contract in developer guide ([workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md) — BPMN-ready workflow contract)
 
 ## Phase 2: Migrate workflows to BPMN-only
