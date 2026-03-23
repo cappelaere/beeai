@@ -197,6 +197,7 @@ async def _run_executor_to_completion(
     """Run workflow via BPMN engine. Raises FrameworkError, TaskPendingException, or Exception."""
     workflow_id = workflow_run.workflow_id
 
+    # Early readiness (see can_run_with_bpmn_engine docstring); not a legacy fallback gate.
     if not can_run_with_bpmn_engine(workflow_id):
         error_msg = (
             f"Workflow '{workflow_id}' is not BPMN-ready. "

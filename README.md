@@ -48,6 +48,7 @@ Documentation is organized by audience - clear paths for users and developers:
 - **[Troubleshooting](docs/user-guide/TROUBLESHOOTING.md)** - Common issues
 
 ### 🔧 For Developers - How to Build & Extend
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Issue-driven workflow, branches, PRs (see [OPERATING.MD](OPERATING.MD))
 - **[Developer Guide](docs/developer-guide/)** - Technical documentation hub
 - **[Makefile Commands](docs/developer-guide/MAKEFILE_COMMANDS.md)** - Complete command reference
 - **[Setup Guide](docs/developer-guide/setup/)** - Development environment
@@ -139,29 +140,19 @@ See [`data/DATABASE_SETUP.md`](data/DATABASE_SETUP.md) for:
 
 RealtyIQ leverages BeeAI Framework workflows to automate complex, multi-step processes by orchestrating multiple agents.
 
+**Execution model:** In the app, workflow **runs are BPMN-only**—each workflow supplies `workflow.bpmn`, `bpmn-bindings.yaml`, and a state class; the engine drives handlers from the diagram. See [workflows/docs/DEVELOPER_GUIDE.md](workflows/docs/DEVELOPER_GUIDE.md) and [docs/architecture/BPMN_ENGINE_REVIEW.md](docs/architecture/BPMN_ENGINE_REVIEW.md).
+
 ### Implemented Workflows
 
 1. **Bidder Onboarding & Verification** ✅
    - Automates complete bidder registration and compliance screening
    - Orchestrates SAM, OFAC, and GRES agents
-   - 8-step workflow with business rules engine
+   - BPMN-defined flow with bound handler methods
    - <5 second execution vs hours manually
 
 ### Quick Start
 
-```python
-from workflows import BidderOnboardingWorkflow
-
-workflow = BidderOnboardingWorkflow()
-result = await workflow.run(
-    bidder_name="John Smith",
-    property_id=12345,
-    registration_data={...}
-)
-
-print(f"Status: {result.state.approval_status}")
-# Status: approved (or denied, pending, review_required)
-```
+Run workflows from the **RealtyIQ UI** (Workflows → start run) or the workflow execution API—not by calling a legacy `workflow.run()` orchestrator. For authoring and the BPMN-ready contract, use the developer guide above.
 
 ### Additional Planned Workflows
 

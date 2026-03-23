@@ -188,8 +188,10 @@ async def register_bidder(request):
 
 ## Workflow Design Patterns
 
+**Runtime:** Workflow execution is **BPMN-only**—order, branching, and parallel regions are defined in `workflow.bpmn` and `bpmn-bindings.yaml`, not by registering a Python step chain. See [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md). The patterns below illustrate **conceptual** control flow; map them to BPMN tasks, gateways, and subprocesses in your diagram.
+
 ### 1. Sequential Processing
-Linear flow through steps in order:
+Linear flow through steps in order (express as sequential BPMN tasks; historical Flo-style example):
 ```python
 workflow.add_step("step1", step1_handler)
 workflow.add_step("step2", step2_handler)

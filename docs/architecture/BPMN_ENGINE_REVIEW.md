@@ -76,13 +76,9 @@ Rejected at save: nested embedded subprocess, event subprocess, callActivity, an
   - **workflow_runner / consumers:** Integration (when to use engine, state creation, DB/WS updates).  
   This is easy to test and evolve.
 
-### Current scope (v1)
+### Current scope (runtime)
 
-- **Linear / single-path execution**  
-  v1 supports one outgoing sequence flow per element. The engine follows a single path through the diagram.
-
-- **Gateways only partially supported**  
-  Handler-return overrides can influence the next step in some code paths, but there is **no full BPMN semantics** for exclusive gateway conditions, parallel gateway fork/join, or event handling. Multiple outgoing flows from a gateway are not evaluated; execution may stop or use a handler return if implemented.
+Execution is **BPMN-driven** with a **supported subset** of BPMN 2.0, not “linear only.” High-level behavior is summarized at the top of this document (boundary events PAR-014, intermediate catch PAR-015, embedded subprocess PAR-016) and in **§2** (parallel fork/join PAR-005+, exclusive gateways, save-time validation). **Handler return values do not select the next task**—routing follows the diagram (conditions, gateways, tokens).
 
 ### Engine state and persistence
 
@@ -151,7 +147,7 @@ Rejected at save: nested embedded subprocess, event subprocess, callActivity, an
 
 ### Parallel gateway save-time contract (pre-runtime)
 
-Workflow Studio save runs `validate_parallel_gateway_topology()` in [workflow_context.py](../../agent_ui/agent_app/workflow_context.py) via `validate_bpmn_for_save()`. Invalid BPMN is blocked before files are written (API returns 400). This is **stricter** than “any wired gateway” so diagrams match a future deterministic parallel runtime.
+Workflow Studio save runs `validate_parallel_gateway_topology()` in [workflow_context.py](../../agent_ui/agent_app/workflow_context.py) via `validate_bpmn_for_save()`. Invalid BPMN is blocked before files are written (API returns 400). This is **stricter** than “any wired gateway” so diagrams match the **implemented** deterministic parallel fork/join runtime (§2, PAR-005+).
 
 | Role | Allowed topology |
 |------|------------------|
@@ -193,10 +189,10 @@ Hidden catalog workflow [workflows/runner_parallel_fj_test/](../../workflows/run
   - A Pydantic (or compatible) state class with a name ending in `State`.
   - Constructor args that match workflow inputs (e.g. `start_date`, `end_date`).
   - `workflow_steps` on state (or it’s created by the engine).  
-  Workflows that don’t follow this (e.g. DAP report) correctly fall back to `executor.run()` but are undocumented; a short “BPMN-engine-ready workflow contract” in the dev guide would help.
+  Execution is **BPMN-only**; workflows without this contract are not runnable until they expose BPMN, bindings, and a state class (see [workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md)).
 
-- **Handler return value ignored**  
-  Handlers can return a next step name; the engine ignores it and always uses `get_next_task_id(bpmn, current)`. That’s correct for “diagram is source of truth,” but it means you cannot implement conditional next steps in code without extending the engine (e.g. optional override when handler returns a non-empty string).
+- **Handler return value and routing**  
+  Handlers may return values for logging; **routing does not follow handler return strings**. Conditional branching is expressed in the diagram (e.g. exclusive gateway conditions), not by returning the next task id from Python.
 
 - **Per-branch cancellation / per-task timeout**  
   Workflow-level cooperative cancellation and optional run timeout are implemented (see §8). Per-branch cancellation and per-task timeouts remain out of scope.
@@ -258,7 +254,7 @@ Hidden catalog workflow [workflows/runner_parallel_fj_test/](../../workflows/run
   If `create_initial_state_from_inputs` raises (e.g. wrong or missing input keys), the exception propagates and the run is marked failed. There is no fallback to `executor.run()` in that case. That’s correct (inputs are invalid), but the error_message could be explicit, e.g. “BPMN engine: failed to create initial state: …”, so logs and UI are clearer.
 
 - **Duplicate context loading**  
-  `can_run_with_bpmn_engine` and `_get_bindings_and_bpmn` both call `get_workflow_context(workflow_id)`. For a single run you may call the former once and the latter once, so context is loaded twice. Minor cost; could be optimized later by caching per run or by having a single “get context and decide execution mode” helper.
+  `can_run_with_bpmn_engine` and `_get_bindings_and_bpmn` both call `get_workflow_context(workflow_id)`. For a single run you may call the former once and the latter once, so context is loaded twice. Minor cost; could be optimized later by caching per run or by combining readiness checks with the first BPMN/bindings load.
 
 - **Resume: state reconstruction**  
   On resume, state is rebuilt from `progress_data["state_data"]` (e.g. `model_dump()`). Attributes that are not on the Pydantic model (e.g. `_bpmn_next_step`) are not persisted. That’s fine because the next step is stored in `progress_data["next_step"]` and the engine uses `start_from_task_id` on resume. No issue here.
@@ -276,67 +272,62 @@ Hidden catalog workflow [workflows/runner_parallel_fj_test/](../../workflows/run
    In the runner, when the BPMN path raises (and it’s not `TaskPendingException`), call `_update_workflow_progress_sync(run_id, {"failed_node_id": current_task_id})` before marking the run failed, so the UI can highlight the failing task.
 
 2. **Document the “BPMN-engine-ready” contract**  
-   In the developer guide or workflow docs: workflow must have a state class in `workflow.py`, BPMN with at least one service task, and bindings; state constructor must accept workflow inputs; handlers must be methods on the executor and take `(self, state)`.
+   **Done** in [workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md) (BPMN-ready workflow contract). Keep it updated when the supported subset changes.
 
 3. **Clarify errors from state creation**  
-   When catching exceptions in `execute_workflow_run` that originate from `create_initial_state_from_inputs` or from the BPMN engine, set `error_message` to something like “BPMN engine: …” so support can tell diagram-driven runs from legacy runs.
+   When catching exceptions in `execute_workflow_run` that originate from `create_initial_state_from_inputs` or from the BPMN engine, set `error_message` to something like “BPMN engine: …” for support clarity (all runs are diagram-driven; there is no legacy executor path).
 
 **Medium term**
 
-4. **Support exclusive gateways**  
-   When an element has multiple outgoing flows, evaluate conditions (e.g. from flow or extension) and choose one path; then continue with `_follow_single_path` from the chosen target. This keeps the engine single-path per execution but allows conditional branches.
+4. **Exclusive gateways** — Implemented (condition evaluation on outgoing flows); see §2. Further BPMN constructs remain in [BPMN_V2_PLAN.md](BPMN_V2_PLAN.md).
 
 5. **Optional handler override for “next”**  
-   If a handler returns a non-empty string (task id), use it as the next task id when it exists in the diagram; otherwise use `get_next_task_id`. Enables rare cases where code must override diagram order without changing the XML.
+   If product needs code-selected next task ids, extend the engine explicitly; today handler return strings are not used for routing.
 
 6. **Caching of workflow context**  
-   For the same `workflow_id` in a request or run, reuse the result of `get_workflow_context` (or at least BPMN + bindings) to avoid repeated file/registry access. Invalidate or TTL when versions change if you support hot-reload.
+   For the same `workflow_id` in a request or run, reuse the result of `get_workflow_context` (or at least BPMN + bindings) to avoid repeated file/registry access. `can_run_with_bpmn_engine` and `_get_bindings_and_bpmn` each load context today (minor duplication).
 
 **Lower priority**
 
 7. **Nested parallel regions**  
    Fork/join pairs are single-level; nested forks after a fork are rejected with **`join_correlation_failed`**.
 
-8. **Timeouts**  
-   Add optional per-task or per-run timeouts and ensure the runner can mark the run as failed and set `failed_node_id` when a timeout occurs.
+8. **Per-task timeouts**  
+   Workflow-level / run timeout is implemented (§8, PAR-010). Optional per-task timeouts remain a future enhancement.
 
 ---
 
 ## 5. Verdict
 
-The design is sound and fits the goal: **diagram-driven execution for linear workflows**, with a clear fallback to the existing executor and correct pause/resume. The implementation is consistent with the rest of the codebase and keeps the BPMN engine focused on orchestration while reusing parsing and runner lifecycle.
+The design fits the goal: **diagram-driven, BPMN-only execution** with a **growing but explicit supported subset** (parallel fork/join, exclusive gateways, boundaries, intermediate catch, embedded subprocess phase 1, cancel/timeout, retries). There is **no legacy `executor.run()` path**; non–BPMN-ready workflows fail fast via `can_run_with_bpmn_engine` and clear errors in the runner.
 
-The main limitations are **intentional** (linear only, no gateways) and should be documented. The suggested improvements are incremental (failure reporting, docs, optional overrides, then gateways/timeouts) and do not require a redesign.
-
-**Recommendation:** Treat the current implementation as the v1 BPMN engine, document its contract and limitations, and add the high-value, low-effort items (failed_node_id, error messaging, docs) soon. Plan gateway support and optional handler override as v2 when you have workflows that need them. See [BPMN_V2_PLAN.md](BPMN_V2_PLAN.md) for the v2 BPMN semantics plan (exclusive/parallel gateways, failure reporting, cancellation/timeout).
+Remaining work is **incremental** (failure UX, optional handler overrides, deeper BPMN coverage per [BPMN_V2_PLAN.md](BPMN_V2_PLAN.md)) and **operational validation** in staging/production—not a second execution model.
 
 ---
 
 ## 6. Consolidation TODOs (single execution model)
 
-**Goal:** Once the BPMN engine is proven in production, migrate all workflows to it and remove the legacy “Python step chain” path so there is **only one way** to execute flows. This simplifies code and avoids two parallel patterns.
+**Status:** Consolidation to a **single BPMN-driven path** is **done** in code. Below distinguishes **operational follow-up** from **optional cleanup**.
 
-- [ ] **Validate BPMN engine in production** – Run bi_weekly_report (and any other BPMN-ready workflow) via the engine for a period; confirm completion, pause/resume, and run-detail UI (e.g. completed_node_ids). Fix any bugs before consolidation.
-- [ ] **Document BPMN-engine contract** – Add a “BPMN-engine-ready workflow” section to the developer guide: state class in workflow.py, BPMN + bindings, handler `(self, state)` signature, input_schema → state constructor. List which workflows are already compatible.
-- [ ] **Migrate bi_weekly_report to BPMN-only** – Remove `_register_steps()` and `self.workflow.add_step(...)`; keep only handler methods. Remove or simplify `run()` so it only builds initial state (or leave a minimal `run()` that the runner no longer uses when `can_run_with_bpmn_engine` is True). Ensure BPMN + bindings fully define order.
-- [ ] **Migrate property_due_diligence to BPMN engine** – Same as above: add/align BPMN and bindings, introduce a state class if missing, implement handlers as methods, remove step registration and legacy `run()` orchestration.
-- [ ] **Migrate bidder_onboarding to BPMN engine** – Same pattern; preserve human-task pause/resume via TaskPendingException and ensure next_step is the BPMN task id.
-- [ ] **Migrate dap_report (or decide out-of-scope)** – DAP report uses a different pattern (no Flo state class). Either refactor to a BPMN-engine-ready state + handlers, or explicitly keep it on legacy `executor.run()` and document why.
-- [ ] **Remove legacy execution path** – Once all supported workflows run via the BPMN engine, remove the `else` branch in `_run_executor_to_completion` that calls `executor_instance.run(**input_data)`. Remove or deprecate `can_run_with_bpmn_engine` (always use engine when BPMN+bindings+state exist) and any consumer/runner code that only runs the old step chain.
-- [ ] **Simplify workflow base / Flo usage** – If no workflow still uses `Workflow.add_step()` and `workflow.run(initial_state)`, consider removing or simplifying the Flo `Workflow` class usage in workflow modules so that only handler methods and state remain; the BPMN engine owns orchestration.
-- [ ] **Update tests and docs** – Update any tests that assume the old step chain or `executor.run()`. Update READMEs, USER_STORY, and architecture docs to describe “one execution model: BPMN-driven.”
+- [ ] **Validate BPMN engine in production** – Run key workflows in production/staging; confirm completion, pause/resume, run-detail UI, parallel/join displays. Fix bugs as found.
+- [x] **Document BPMN-engine contract** – [workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md) (BPMN-ready workflow contract + supported subset / limitations).
+- [x] **Migrate supported workflows to BPMN-only** – dap_report, bi_weekly_report, property_due_diligence, bidder_onboarding (and catalog tests) use BPMN + bindings + state; no legacy `run()` orchestration.
+- [x] **Remove legacy execution path** – `_run_executor_to_completion` uses only the BPMN engine.
+- [x] **`can_run_with_bpmn_engine`** – **Retained** as an early readiness check (BPMN, bindings, state class, first executable). Documented in `bpmn_engine.py`; used by runner, consumers, and tools—not a fallback switch.
+- [ ] **Simplify workflow base / Flo usage** – Optional: further trim unused Flo `Workflow` / `add_step` patterns in workflow modules if none remain.
+- [x] **Tests and docs for one execution model** – Architecture + developer docs describe BPMN-only runtime; BPMN test suites cover engine, integration, conformance (ongoing maintenance).
 
 ---
 
-## 7. Design: Parallel gateways (next milestone)
+## 7. Design notes: Parallel gateways (reference)
 
-This section is a **design-only** pass before implementing parallel gateways. No implementation is implied; the intent is to agree on semantics and data shapes so that a future implementation stays consistent.
+**Runtime status:** Parallel fork/join and multi-token execution are **implemented**; see **§2** (PAR-005+), [bpmn_parallel.py](../../agent_ui/agent_app/bpmn_parallel.py), and conformance tests. The subsections below record **design intent** and **UI/resume considerations** that informed the implementation; they are not a “future-only” spec.
 
 ### Multi-token schema
 
-- **Representation:** The engine already reserves `branch_id` on each token. For parallel gateways, **multiple active tokens** will be allowed: one per branch after a parallel fork. Each token has `current_element_id` and `branch_id` (e.g. a UUID or a stable branch index). The `active_tokens` list in engine state will hold more than one entry while branches are in progress.
-- **Mapping to branches:** When the engine hits a parallel gateway (fork), it will create one new token per outgoing sequence flow and advance each token to the flow's target. The original token is retired; the new tokens share the same "fork point" in the diagram but are independent until join.
-- **Single-token today:** Current v2 engine uses a single token; the list structure and reserved `branch_id` are already in place so that adding multiple tokens is an extension of the same schema.
+- **Representation:** The engine reserves `branch_id` on each token. After a **parallel fork**, **multiple active tokens** exist: one per outgoing flow. Each token has `current_element_id` and `branch_id` (e.g. `{fork_id}:{flow_id}`). The `active_tokens` list holds more than one entry while branches are in progress.
+- **Mapping to branches:** When the engine hits a parallel gateway (fork), it creates one new token per outgoing sequence flow and advances each token to the flow's target. The original token is retired; the new tokens share the same fork point but are independent until join.
+- **Schema:** Multi-token state is normalized on load (`normalize_engine_state`); see §1 engine-state table.
 
 ### Join semantics
 
@@ -358,20 +349,18 @@ This section is a **design-only** pass before implementing parallel gateways. No
 
 ### Scaffolding (for implementers)
 
-**Canonical helper layer:** [agent_app/bpmn_parallel.py](../../agent_ui/agent_app/bpmn_parallel.py) is the single module for parallel token/join bookkeeping until fork/join runtime lands in the engine. It is engine-agnostic (no BPMN traversal, handlers, DB, or Django). Unit tests: `test_bpmn_parallel_scaffolding.py`.
+**Canonical helper layer:** [agent_app/bpmn_parallel.py](../../agent_ui/agent_app/bpmn_parallel.py) is the module for parallel token/join bookkeeping used by the engine. It is engine-agnostic (no BPMN traversal, handlers, DB, or Django). Unit tests: `test_bpmn_parallel_scaffolding.py`.
 
 **Token helpers:** `ensure_active_tokens`, `token_dict`, `append_token`, `replace_token_at_index`, `replace_token_by_branch_id`, `tokens_at_element`, `tokens_at_join`, `active_element_ids`, `active_branch_ids`, `remove_tokens_by_branch_ids`. `remove_tokens_by_branch_ids` drops any non-dict entries in `active_tokens` (malformed tokens are not preserved); parallel runtime should rely on normalized state after load.
 
 **Join helpers:** `ensure_pending_joins`, `PendingJoinInfo`, `register_pending_join`, `get_pending_join`, `is_join_satisfied`, `mark_branch_arrived_at_join` (idempotent per branch), `clear_pending_join`.
 
-When implementing parallel gateways, the following extension points apply (no full fork/join in the main loop yet):
+**Extension points** (implemented in engine + runner):
 
-- **Multi-token state model:** `BpmnEngineStateSchema` documents `active_tokens`, `pending_joins`, and failure metadata alongside list fields; use `branch_id` on each token at a parallel fork.
-- **Join bookkeeping:** `pending_joins` on engine state holds `PendingJoinInfo`-shaped dicts per join element id so the engine can tell when all sibling branches have arrived.
-- **Progress representation for multiple active nodes:** `current_node_ids` can remain a list; with multiple tokens it becomes the list of `current_element_id` from each active token. The UI and `progress_data` already pass lists; no change to the shape, only to how the list is populated.
-- **Pause/resume with more than one active branch:** Persist `active_tokens` as today; on resume, restore all tokens and run the main loop once per active token (or in a round-robin). No change to `progress_data` keys; only the number of entries in `active_tokens` and the resume loop logic.
-
-Implementation of the above is deferred until this design is agreed and prioritized.
+- **Multi-token state model:** `active_tokens`, `pending_joins`, and failure metadata; `branch_id` on each token at a parallel fork.
+- **Join bookkeeping:** `pending_joins` holds `PendingJoinInfo`-shaped dicts per join element id until all expected branches arrive.
+- **Progress representation:** `current_node_ids_for_progress` derives multiple current nodes from tokens (PAR-008).
+- **Pause/resume:** Full `active_tokens` persist in `progress_data`; resume must not collapse tokens incorrectly (see §1 and integration tests).
 
 ## Verification
 

@@ -1,0 +1,336 @@
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.2' }}
+    steps:
+      # Succeed without running review when the secret is unset (fork PRs, or repo not
+      # configured yet) so a required "Codex PR Review" check does not block merges.
+      - name: Gate (OPENAI_API_KEY)
+        id: codex_gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "run_review=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_review=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Codex PR review skipped: add the OPENAI_API_KEY repository secret to enable automated reviews."
+          fi
+
+      - name: Check out repository
+        if: steps.codex_gate.outputs.run_review == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect PR metadata and linked issue
+        if: steps.codex_gate.outputs.run_review == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+              }
+            );
+
+            const prContext = {
+              number: pr.number,
+              title: pr.title,
+              body: pr.body || "",
+              base: pr.base.ref,
+              head: pr.head.ref,
+              changed_files: files.map((f) => f.filename),
+            };
+            fs.writeFileSync("pr_context.json", JSON.stringify(prContext, null, 2));
+
+            const body = pr.body || "";
+            const issueMatch =
+              body.match(/(?:^|\n)-\s*Issue:\s*#(\d+)\b/i) ||
+              body.match(/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i);
+
+            let issueContext = {
+              number: null,
+              title: "No linked issue found.",
+              body: "PR body did not include a parseable issue reference.",
+            };
+
+            if (issueMatch) {
+              const issue_number = Number(issueMatch[1]);
+              const issue = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number,
+              });
+              issueContext = {
+                number: issue_number,
+                title: issue.data.title,
+                body: issue.data.body || "",
+              };
+            }
+
+            fs.writeFileSync("issue_context.json", JSON.stringify(issueContext, null, 2));
+
+      - name: Build diff snapshot
+        if: steps.codex_gate.outputs.run_review == 'true'
+        run: |
+          git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
+          git diff --unified=2 "origin/${{ github.event.pull_request.base.ref }}...HEAD" > pr.diff
+
+      - name: Build Codex review prompt
+        if: steps.codex_gate.outputs.run_review == 'true'
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          root = pathlib.Path(".")
+          template = (root / ".github" / "prompts" / "codex_pr_review.md").read_text()
+          pr = json.loads((root / "pr_context.json").read_text())
+          issue = json.loads((root / "issue_context.json").read_text())
+          diff = (root / "pr.diff").read_text()
+
+          def extract_section(markdown: str, heading: str) -> str:
+            pattern = re.compile(
+                rf"^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)",
+                re.MULTILINE | re.DOTALL,
+            )
+            match = pattern.search(markdown or "")
+            return match.group(1).strip() if match else ""
+
+          approved_plan = extract_section(pr.get("body", ""), "Approved Plan")
+          pr_summary = extract_section(pr.get("body", ""), "What changed") or (pr.get("body", "")[:4000])
+          changed_files = "\n".join(f"- {path}" for path in pr.get("changed_files", [])) or "- None"
+
+          max_diff_chars = 120000
+          if len(diff) > max_diff_chars:
+            diff = diff[:max_diff_chars] + "\n\n[diff truncated for review]"
+
+          # Single-pass substitution: sequential str.replace() would re-expand
+          # placeholder-shaped text inside user-controlled fields (e.g. {{PR_DIFF}} in issue body).
+          values = {
+            "ISSUE_TITLE": issue.get("title", ""),
+            "ISSUE_BODY": issue.get("body", ""),
+            "APPROVED_PLAN": approved_plan or "No approved plan section found in the PR body.",
+            "PR_NUMBER": str(pr.get("number", "")),
+            "PR_TITLE": pr.get("title", ""),
+            "BASE_BRANCH": pr.get("base", ""),
+            "HEAD_BRANCH": pr.get("head", ""),
+            "PR_SUMMARY": pr_summary or "No PR summary provided.",
+            "CHANGED_FILES": changed_files,
+            "PR_DIFF": diff,
+          }
+          placeholder_re = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+
+          def substitute_template(t: str) -> str:
+            def repl(m):
+              name = m.group(1)
+              if name not in values:
+                return m.group(0)
+              return values[name]
+
+            return placeholder_re.sub(repl, t)
+
+          prompt = substitute_template(template)
+
+          (root / "codex_review_prompt.txt").write_text(prompt)
+          PY
+
+      - name: Request Codex review from OpenAI
+        if: steps.codex_gate.outputs.run_review == 'true'
+        id: codex_review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+          import urllib.request
+          import urllib.error
+
+          def extract_responses_api_text(resp: dict) -> str:
+              """Aggregate assistant-visible text from raw /v1/responses JSON.
+
+              The wire JSON has no top-level ``output_text``; that field exists only as
+              a convenience property on SDK objects (see OpenAI Python ``Response.output_text``).
+              Match SDK behavior: only ``output`` items with ``type == "message"``, and
+              ``content`` blocks of type ``output_text`` (plus ``refusal`` / legacy ``text``).
+              """
+              err = resp.get("error")
+              if isinstance(err, dict) and err.get("message"):
+                  raise SystemExit(f"OpenAI API error: {err.get('message')}")
+
+              parts: list[str] = []
+              for item in resp.get("output") or []:
+                  if not isinstance(item, dict) or item.get("type") != "message":
+                      continue
+                  for block in item.get("content") or []:
+                      if not isinstance(block, dict):
+                          continue
+                      btype = block.get("type")
+                      if btype == "output_text":
+                          t = block.get("text")
+                          if isinstance(t, str) and t:
+                              parts.append(t)
+                      elif btype == "refusal":
+                          r = block.get("refusal")
+                          if isinstance(r, str) and r:
+                              parts.append(r)
+                      elif btype == "text":
+                          t = block.get("text")
+                          if isinstance(t, str) and t:
+                              parts.append(t)
+              return "".join(parts).strip()
+
+          prompt = pathlib.Path("codex_review_prompt.txt").read_text()
+          payload = {
+              "model": os.environ.get("OPENAI_MODEL", "gpt-5.2"),
+              "input": prompt,
+          }
+
+          request = urllib.request.Request(
+              "https://api.openai.com/v1/responses",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request) as response:
+                  body = json.loads(response.read().decode("utf-8"))
+          except urllib.error.HTTPError as e:
+              raw = e.read().decode("utf-8", errors="replace")
+              message = f"OpenAI API HTTP {e.code}"
+              try:
+                  err = json.loads(raw)
+                  api_error = err.get("error") or {}
+                  detail = api_error.get("message")
+                  code = api_error.get("code")
+                  if detail:
+                      message = f"{message}: {detail}"
+                  if code:
+                      message = f"{message} (code: {code})"
+              except json.JSONDecodeError:
+                  if raw.strip():
+                      message = f"{message}: {raw.strip()}"
+
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI API request failed.\n\n"
+                  f"- Error: `{message}`\n"
+                  "- Action: check API billing/quota, secret configuration, and retry the workflow.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              print(message, file=sys.stderr)
+              raise SystemExit(0) from e
+          except urllib.error.URLError as e:
+              message = f"OpenAI API connection error: {e.reason}"
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI API could not be reached.\n\n"
+                  f"- Error: `{message}`\n"
+                  "- Action: retry the workflow after confirming outbound network access and API availability.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              print(message, file=sys.stderr)
+              raise SystemExit(0) from e
+
+          output_text = extract_responses_api_text(body)
+          if not output_text:
+              pathlib.Path("codex_review.md").write_text(
+                  "<!-- codex-pr-review -->\n"
+                  "## Codex Review\n\n"
+                  "Review was not generated because the OpenAI response did not contain extractable review text.\n\n"
+                  "- Action: inspect the workflow logs and retry.\n"
+              )
+              pathlib.Path("codex_review_status.txt").write_text("degraded\n")
+              raise SystemExit(0)
+
+          pathlib.Path("codex_review.md").write_text(
+              "<!-- codex-pr-review -->\n"
+              "## Codex Review\n\n"
+              f"{output_text}\n"
+          )
+          pathlib.Path("codex_review_status.txt").write_text("ok\n")
+          PY
+
+      - name: Create or update PR comment
+        if: steps.codex_gate.outputs.run_review == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const body = fs.readFileSync("codex_review.md", "utf8");
+            const marker = "<!-- codex-pr-review -->";
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner,
+                repo,
+                issue_number: pull_number,
+                per_page: 100,
+              }
+            );
+
+            const existing = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" &&
+                comment.body &&
+                comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body,
+              });
+            }
+
+      - name: Surface degraded review state
+        if: steps.codex_gate.outputs.run_review == 'true'
+        run: |
+          if [ -f codex_review_status.txt ] && [ "$(cat codex_review_status.txt)" = "degraded" ]; then
+            echo "Codex PR review completed in degraded mode; see PR comment for details."
+          fi

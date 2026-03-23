@@ -12,7 +12,7 @@ See **[BPMN_ENGINE_REVIEW.md](./BPMN_ENGINE_REVIEW.md)** §6 for current-state r
 
 - [ ] Run BPMN-ready workflows (e.g. bi_weekly_report) in production/staging; confirm completion, pause/resume, run-detail UI
 - [ ] Fix any engine or runner bugs found
-- [ ] Document “BPMN-engine-ready workflow” contract in developer guide
+- [x] Document “BPMN-engine-ready workflow” contract in developer guide ([workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md) — BPMN-ready workflow contract)
 
 ## Phase 2: Migrate workflows to BPMN-only
 
@@ -24,6 +24,6 @@ See **[BPMN_ENGINE_REVIEW.md](./BPMN_ENGINE_REVIEW.md)** §6 for current-state r
 ## Phase 3: Single execution path
 
 - [x] **Single execution path** – Legacy branch removed; runner and consumers use BPMN engine only. Non–BPMN-ready workflows fail with a clear error.
-- [ ] Simplify or remove `can_run_with_bpmn_engine` (optional; keep for "can this run?" check; execution always requires BPMN)
+- [x] **`can_run_with_bpmn_engine`** – **Kept** as a cheap readiness predicate (BPMN + bindings + state class + valid first executable). Used by the runner, consumers, and tools for fail-fast messaging; it does not enable a non-BPMN fallback. Documented on the function in `bpmn_engine.py`.
 - [x] **Workflow modules** – No Flo `Workflow` / `add_step`; no legacy `run()` in dap_report, bi_weekly_report, property_due_diligence, bidder_onboarding
-- [ ] Update tests and docs for “one execution model: BPMN-driven”
+- [x] **Tests and docs** – Describe BPMN-only execution and supported subset; consolidation cleanup (issue #1). Ongoing: keep architecture docs aligned when engine behavior changes.
