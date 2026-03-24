@@ -2,16 +2,18 @@
 
 This document records **how** to validate BPMN-only workflow execution and **where** to capture evidence. It complements [BPMN_RUN_OPERATORS.md](./BPMN_RUN_OPERATORS.md) (expected run-detail semantics).
 
-**Important:** Anything below that uses the Django **test** database or local-only commands is **partial evidence** for Issue #7. It **does not** replace **hosted staging or production** validation. Phase 1 in [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md) stays **open** until real deployment runs are recorded.
+**Important:** Local/test-DB evidence (**§4** below) is **partial** only. **Hosted** staging or production matrices (**§3**) are required before Phase 1 can be checked off in [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md).
 
 ## 1. Preconditions (record per exercise)
 
-| Field | Value (fill when validating) |
-|-------|------------------------------|
-| **Environment** | Example below: **local** Django test DB only — **not** staging/production. |
-| **Date** | 2026-03-23 |
-| **Operator** | Cursor agent (automated) |
-| **App version / commit** | See git history on branch `chore/7-bpmn-staging-validation`. |
+Use a **separate row** (or re-fill this table) for each validation campaign—**hosted** vs **local** must not be conflated.
+
+| Field | Local reference (2026-03-23) | Hosted (fill when you run staging/production) |
+|-------|------------------------------|-----------------------------------------------|
+| **Environment** | Django **test** DB only | e.g. Staging — `https://…` (no secrets in git) |
+| **Date** | 2026-03-23 | |
+| **Operator** | Cursor agent (automated) | |
+| **App version / commit** | Branch `chore/7-bpmn-staging-validation` | Deployed **SHA or release tag** |
 
 **Catalog-visible BPMN workflows** (default registry list; `hide_from_catalog` workflows are excluded from the Workflows UI):
 
@@ -24,7 +26,7 @@ This document records **how** to validate BPMN-only workflow execution and **whe
 
 Confirm each workflow appears under **Workflows** in the UI before treating the environment as ready.
 
-**Hosted staging/production:** Re-run section 3 against your deployed host when credentials are ready; paste run IDs and outcomes here or in a follow-up PR. That step is required to **complete** Phase 1 in the consolidation TODOs.
+**Hosted:** Complete **§3** tables on your deployed host, then update Phase 1 in the consolidation TODOs.
 
 ## 2. Automated baseline (local / CI)
 
@@ -56,22 +58,73 @@ Coverage highlights (see `test_workflow_runner_integration.py` for full list):
 - **`runner_parallel_fj_test`** — parallel fork/join completion, pause before join + resume, pending joins, branch failure, cancel, timeout scenarios.
 - **`par015_message_runner`** — intermediate message catch + resume.
 
-## 3. Partial matrix (local test DB — not staging/production)
+## 3. Hosted staging/production validation
 
-This matrix records **one local test-DB exercise** (2026-03-23): `execute_workflow_run` (not the WebSocket entrypoint). Run-detail was checked with `GET /workflows/runs/<run_id>/` (anonymous session user id 9): **200** and BPMN markers in HTML.
+### 3.0 Automation blocker (2026-03-23)
 
-**Do not** treat this table as proof that Issue #7 staging acceptance criteria are met.
+**Hosted runs were not executed from this repository in the automation pass that updated this doc.**
 
-### 3.1 Completion (happy path)
+**Reason:** There is **no** checked-in staging/production **base URL**, **authentication** method usable without secrets, or **operator session** for a deployed RealtyIQ instance. Fabricating run IDs would violate the validation procedure.
+
+**To close Issue #7 / Phase 1:** A human operator with access must:
+
+1. Log into the target **staging or production** app.
+2. Run the workflows from the **Workflows** UI (or your approved API), using valid inputs for that environment.
+3. Fill the tables below with **real** run IDs and outcomes.
+4. Open **run detail** for each run and record UI/progress observations (see [BPMN_RUN_OPERATORS.md](./BPMN_RUN_OPERATORS.md)).
+5. For **pause/resume**, use a workflow that reaches **Waiting for task** (or equivalent); if none is available, mark **Skip** with reason.
+6. For **parallel/join** in the BPMN diagram UI: `runner_parallel_fj_test` is **hidden** from the catalog—use an internal API or temporary catalog exposure on staging **only** if approved, else **Skip** with reason.
+7. Commit the filled **§3** tables (or open a PR) and then check Phase 1 in [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md).
+
+### 3.1 Completion (happy path) — hosted
 
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
 |-------------|--------|--------------------|-------|
-| `dap_report` | `121edda3` | **Fail** | Failed at exclusive gateway `Gateway_1` after GRES step (see §5 / issue #9). |
+| `dap_report` | | | |
+| `bi_weekly_report` | | | |
+| `property_due_diligence` | | | |
+| `bidder_onboarding` | | | |
+
+### 3.2 Pause / resume — hosted
+
+| Workflow ID | Run ID | Pass / Fail / Skip | Notes |
+|-------------|--------|--------------------|-------|
+| — | — | — | Fill when a human-task pause is reachable on hosted. |
+
+### 3.3 Run-detail UI (progress, current / completed) — hosted
+
+| Workflow ID | Run ID | Pass / Fail / Skip | Notes |
+|-------------|--------|--------------------|-------|
+| — | — | — | Fill per workflow after hosted runs (see §3.1 run IDs). |
+
+### 3.4 Failure presentation (controlled) — hosted
+
+| Workflow ID | Run ID | Pass / Fail / Skip | Notes |
+|-------------|--------|--------------------|-------|
+| — | — | — | Fill after controlled failure run (non-prod preferred). |
+
+### 3.5 Parallel fork / join — hosted
+
+| Method | Environment | Run ID | Pass / Fail / Skip | Notes |
+|--------|-------------|--------|--------------------|-------|
+| Catalog BPMN parallel gateways | | | | Only `runner_parallel_fj_test` in-repo; usually **Skip** unless API/staging exposure. |
+
+## 4. Local partial matrix (historical — test DB only)
+
+This matrix records **one local test-DB exercise** (2026-03-23): `execute_workflow_run` (not the WebSocket entrypoint). Run-detail was checked with `GET /workflows/runs/<run_id>/` (anonymous session user id 9): **200** and BPMN markers in HTML.
+
+**Do not** treat this table as proof that Issue #7 **hosted** acceptance criteria are met.
+
+### 4.1 Completion (happy path)
+
+| Workflow ID | Run ID | Pass / Fail / Skip | Notes |
+|-------------|--------|--------------------|-------|
+| `dap_report` | `121edda3` | **Fail** | Failed at exclusive gateway `Gateway_1` after GRES step (see §6 / issue #9). |
 | `bi_weekly_report` | `f8d08b78` | **Pass** | **Completed** on test DB only. |
 | `property_due_diligence` | `9bcc0d48` | **Pass** | **Completed** on test DB only. |
 | `bidder_onboarding` | `494034f4` | **Fail** | Failed at `Gateway_SAM_Decision` (issue #9). |
 
-### 3.2 Pause / resume
+### 4.2 Pause / resume
 
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
 |-------------|--------|--------------------|-------|
@@ -80,7 +133,7 @@ This matrix records **one local test-DB exercise** (2026-03-23): `execute_workfl
 
 Product workflows in the local pass did not reach **waiting_for_task** for manual pause testing; repeat on staging if required.
 
-### 3.3 Run-detail UI (progress, current / completed nodes)
+### 4.3 Run-detail UI (progress, current / completed nodes)
 
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
 |-------------|--------|--------------------|-------|
@@ -89,14 +142,14 @@ Product workflows in the local pass did not reach **waiting_for_task** for manua
 | `property_due_diligence` | `9bcc0d48` | **Pass** | Completed run; BPMN markers (local). |
 | `bidder_onboarding` | `494034f4` | **Pass** | Failed run; BPMN markers (local). |
 
-### 3.4 Failure presentation (controlled)
+### 4.4 Failure presentation (controlled)
 
 | Workflow ID | Run ID | Pass / Fail / Skip | Notes |
 |-------------|--------|--------------------|-------|
 | `bidder_onboarding` | `494034f4` | **Pass** | Failed run + run-detail (local). |
 | `dap_report` | `121edda3` | **Pass** | Failed run + run-detail (local). |
 
-## 4. Parallel fork / join (UI vs automated)
+## 5. Parallel fork / join (UI vs automated)
 
 **Repository fact:** The only committed BPMN with parallel gateways is **`runner_parallel_fj_test`**, which sets `hide_from_catalog: true`.
 
@@ -106,7 +159,7 @@ Product workflows in the local pass did not reach **waiting_for_task** for manua
 | Product parallel research | Django test DB | `9bcc0d48` | **Pass** | `property_due_diligence` handler parallelism; not the same as BPMN parallel gateway tokens. |
 | Live UI (`runner_parallel_fj_test`) | — | — | **Skip** | Hidden from catalog; use API or temporary catalog flag on staging if UI proof is required. |
 
-## 5. Bugs and follow-ups
+## 6. Bugs and follow-ups
 
 | Issue | Summary |
 |-------|---------|
@@ -115,4 +168,4 @@ Product workflows in the local pass did not reach **waiting_for_task** for manua
 
 ---
 
-**Status:** Local notes and diagnostics are **useful but incomplete** for Issue #7. **Hosted** staging/production matrices are still required to close Phase 1 in [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md).
+**Status:** **Hosted §3** is **not filled** — automation was **blocked** by missing deployment URL/credentials (see §3.0). **§4** local history remains useful for developers but **does not** close Phase 1. After an operator completes **§3**, update [BPMN_CONSOLIDATION_TODOS.md](../architecture/BPMN_CONSOLIDATION_TODOS.md).
