@@ -5,6 +5,7 @@ from django.http import FileResponse, HttpResponseNotFound
 from django.urls import path
 
 from . import views
+from .analytics.views import analytics_location_api
 
 
 def favicon_view(request):
@@ -67,6 +68,7 @@ urlpatterns = [
         views.workflow_version_files,
         name="workflow_version_files",
     ),
+    path("api/analytics/location/", analytics_location_api, name="analytics_location_api"),
     path("prompts/", views.prompts_view, name="prompts"),
     path("examples/", views.examples_view, name="examples"),
     path("documents/", views.documents_view, name="documents"),

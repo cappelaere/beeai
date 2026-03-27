@@ -589,3 +589,8 @@ class WorkflowVersion(models.Model):
         tag_str = f" ({self.version_tag})" if self.version_tag else ""
         current_str = " [CURRENT]" if self.is_current else ""
         return f"{self.workflow_id} v{self.version_number}{tag_str}{current_str}"
+
+
+# Analytics models live in a dedicated module but are re-exported here so Django
+# discovers them under agent_app.models.
+from .analytics.models import PageViewEvent, TrackedPage, TrackedPageQueryParam  # noqa: E402
