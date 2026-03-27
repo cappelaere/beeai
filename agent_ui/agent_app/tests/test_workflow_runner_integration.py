@@ -11,7 +11,7 @@ from django.test import TransactionTestCase
 from agent_app.bpmn_engine import BpmnEngineError, _get_bindings_and_bpmn, normalize_engine_state
 from agent_app.models import WorkflowRun
 from agent_app.task_service import TaskPendingError
-from agent_app.workflow_context import normalize_bindings
+from agent_app.workflow_context import get_workflow_context, normalize_bindings
 from agent_app.workflow_registry import workflow_registry
 from agent_app.workflow_runner import (
     _execution_abort_reason_sync,
@@ -32,6 +32,178 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
     def setUpClass(cls):
         super().setUpClass()
         workflow_registry.reload()
+
+    def _create_workflow_run(self, workflow_id: str, input_data: dict):
+        rid = _run_id()
+        WorkflowRun.objects.create(
+            run_id=rid,
+            workflow_id=workflow_id,
+            workflow_name=workflow_id,
+            status=WorkflowRun.STATUS_PENDING,
+            user_id=9,
+            input_data=input_data,
+        )
+        return rid
+
+    def test_issue9_bidder_onboarding_routes_gateway_in_runner_path(self):
+        """Issue #9 regression: real runner path must pass Gateway_SAM_Decision."""
+        from agent_app import bpmn_engine
+
+        ctx = get_workflow_context("bidder_onboarding")
+        self.assertIn("/currentVersion/", ctx.get("files", {}).get("bpmn_path", ""))
+
+        gateway_calls = []
+        original_select = bpmn_engine.select_exclusive_flow
+
+        async def _validate_input(self, state):
+            return None
+
+        async def _check_property_status(self, state):
+            state.property_active = True
+            state.property_details = {"is_active": True, "is_approved": True}
+            return None
+
+        async def _check_sam_compliance(self, state):
+            state.sam_passed = False
+            return None
+
+        async def _finalize_status(self, state):
+            state.approval_status = "denied"
+            state.is_eligible = False
+            state.requires_manual_review = False
+            state.compliance_summary = "Issue #9 regression path"
+            state.bid_limit = 0.0
+            return None
+
+        async def _create_audit_log(self, state):
+            return None
+
+        def _spy_select(bpmn, gateway_element_id, state, bindings):
+            target_id = original_select(bpmn, gateway_element_id, state, bindings)
+            if gateway_element_id == "Gateway_SAM_Decision":
+                gateway_calls.append(
+                    {
+                        "gateway": gateway_element_id,
+                        "sam_passed": getattr(state, "sam_passed", None),
+                        "default_flow_id": (bpmn.get("elements", {}).get(gateway_element_id) or {}).get(
+                            "default_flow_id"
+                        ),
+                        "target_id": target_id,
+                    }
+                )
+            return target_id
+
+        rid = self._create_workflow_run(
+            "bidder_onboarding",
+            {
+                "bidder_name": "Issue9 Regression Bidder",
+                "property_id": 1,
+                "registration_data": {
+                    "email": "issue9@example.invalid",
+                    "phone": "555-0100",
+                    "terms_accepted": True,
+                    "age_accepted": True,
+                },
+            },
+        )
+
+        with (
+            patch("agent_app.bpmn_engine.select_exclusive_flow", side_effect=_spy_select),
+            patch(
+                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.validate_input",
+                new=_validate_input,
+            ),
+            patch(
+                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.check_property_status",
+                new=_check_property_status,
+            ),
+            patch(
+                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.check_sam_compliance",
+                new=_check_sam_compliance,
+            ),
+            patch(
+                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.finalize_status",
+                new=_finalize_status,
+            ),
+            patch(
+                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.create_audit_log",
+                new=_create_audit_log,
+            ),
+        ):
+            asyncio.run(execute_workflow_run(rid, send_message=None))
+
+        run = WorkflowRun.objects.get(run_id=rid)
+        self.assertEqual(run.status, WorkflowRun.STATUS_COMPLETED)
+        self.assertTrue(gateway_calls, msg="expected Gateway_SAM_Decision to be evaluated")
+        self.assertEqual(gateway_calls[0]["sam_passed"], False)
+        self.assertEqual(gateway_calls[0]["default_flow_id"], "Flow_gateway_no")
+        self.assertEqual(gateway_calls[0]["target_id"], "finalize_status")
+
+    def test_issue9_dap_report_routes_gateway_in_runner_path(self):
+        """Issue #9 regression: real runner path must pass Gateway_1."""
+        from agent_app import bpmn_engine
+
+        ctx = get_workflow_context("dap_report")
+        self.assertIn("/currentVersion/", ctx.get("files", {}).get("bpmn_path", ""))
+
+        gateway_calls = []
+        original_select = bpmn_engine.select_exclusive_flow
+
+        async def _retrieve_data(self, state):
+            state.dap_data = [{"portfolio_id": "P1"}]
+            return None
+
+        async def _create_time_series(self, state):
+            state.time_series_data = [{"date": "2025-06-01", "value": 1.0}]
+            state.trends = {"trend": "stable"}
+            return None
+
+        async def _create_analysis(self, state):
+            state.analysis_results = {"ok": True}
+            state.issues_found = []
+            state.has_issues = False
+            return None
+
+        def _spy_select(bpmn, gateway_element_id, state, bindings):
+            target_id = original_select(bpmn, gateway_element_id, state, bindings)
+            if gateway_element_id == "Gateway_1":
+                gateway_calls.append(
+                    {
+                        "gateway": gateway_element_id,
+                        "has_issues": getattr(state, "has_issues", None),
+                        "default_flow_id": (bpmn.get("elements", {}).get(gateway_element_id) or {}).get(
+                            "default_flow_id"
+                        ),
+                        "target_id": target_id,
+                    }
+                )
+            return target_id
+
+        rid = self._create_workflow_run(
+            "dap_report",
+            {"report_date": "2025-06-01", "lookback_days": 7},
+        )
+
+        with (
+            patch("agent_app.bpmn_engine.select_exclusive_flow", side_effect=_spy_select),
+            patch("workflows.dap_report.workflow.DAPReportWorkflow.retrieve_data", new=_retrieve_data),
+            patch(
+                "workflows.dap_report.workflow.DAPReportWorkflow.create_time_series",
+                new=_create_time_series,
+            ),
+            patch(
+                "workflows.dap_report.workflow.DAPReportWorkflow.create_analysis",
+                new=_create_analysis,
+            ),
+        ):
+            asyncio.run(execute_workflow_run(rid, send_message=None))
+
+        run = WorkflowRun.objects.get(run_id=rid)
+        self.assertEqual(run.status, WorkflowRun.STATUS_COMPLETED)
+        self.assertTrue(gateway_calls, msg="expected Gateway_1 to be evaluated")
+        self.assertEqual(gateway_calls[0]["has_issues"], False)
+        self.assertEqual(gateway_calls[0]["default_flow_id"], "Flow_6")
+        self.assertEqual(gateway_calls[0]["target_id"], "Gateway_2")
 
     def test_par015_message_catch_execute_then_resume(self):
         workflow_registry.reload()
