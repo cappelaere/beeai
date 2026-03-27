@@ -7,9 +7,9 @@ hosted validation. They only exercise `execute_workflow_run` against the Django
 
 - **Completion checks:** `bi_weekly_report` and `property_due_diligence` must end
   `completed` for the test to pass (local test-DB only).
-- **Observability checks:** `bidder_onboarding` and `dap_report` only assert a
-  terminal outcome and run-detail HTML markers; failures/timeouts are expected
-  until GitHub issue #9 (BPMN gateway) is fixed.
+- **Observability checks:** `bidder_onboarding` and `dap_report` still allow
+  non-completed terminal outcomes in local test DB, but must **not** fail with
+  the historical issue #9 gateway error ("no matching condition and no default flow").
 
 Skipped unless ``ISSUE7_PRODUCT_BPMN_DIAGNOSTIC=1`` (CI stays fast).
 
@@ -88,6 +88,19 @@ class Issue7ProductBpmnDiagnostic(TransactionTestCase):
             msg="run detail should include BPMN diagram or operator panel markers",
         )
 
+    def _assert_no_issue9_gateway_failure(self, progress_data, error_message):
+        error_text = str(error_message or "")
+        failure_reason = ""
+        if isinstance(progress_data, dict):
+            failure_reason = str(progress_data.get("failure_reason", "") or "")
+            failure_meta = progress_data.get("condition_failure_metadata") or {}
+            if isinstance(failure_meta, dict):
+                error_text += " " + str(failure_meta.get("message", ""))
+                error_text += " " + str(failure_meta.get("gateway_element_id", ""))
+        self.assertNotEqual(failure_reason, "invalid_gateway")
+        lowered = error_text.lower()
+        self.assertNotIn("no matching condition and no default flow", lowered)
+
     def test_bi_weekly_report_completes_local_test_db(self):
         """Local test DB only: must reach completed (not a staging sign-off)."""
         rid, status, _pd, err = self._run_workflow(
@@ -117,8 +130,8 @@ class Issue7ProductBpmnDiagnostic(TransactionTestCase):
         self._assert_run_detail_contains_bpmn_ui(rid)
 
     def test_bidder_onboarding_bpmn_diagnostic_observability(self):
-        """Terminal outcome + run-detail only; known BPMN gateway gaps (issue #9)."""
-        rid, status, _pd, err = self._run_workflow(
+        """Terminal outcome + run-detail; must not hit historical issue #9 gateway failure."""
+        rid, status, pd, err = self._run_workflow(
             "bidder_onboarding",
             {
                 "bidder_name": "Issue7 Diagnostic User",
@@ -142,11 +155,12 @@ class Issue7ProductBpmnDiagnostic(TransactionTestCase):
             ),
             msg=f"unexpected non-terminal status={status!r} err={err!r}",
         )
+        self._assert_no_issue9_gateway_failure(pd, err)
         self._assert_run_detail_contains_bpmn_ui(rid)
 
     def test_dap_report_bpmn_diagnostic_observability(self):
-        """Terminal outcome + run-detail only; gateway defect (issue #9)."""
-        rid, status, _pd, err = self._run_workflow(
+        """Terminal outcome + run-detail; must not hit historical issue #9 gateway failure."""
+        rid, status, pd, err = self._run_workflow(
             "dap_report",
             {"report_date": "2025-06-01", "lookback_days": 7},
         )
@@ -161,4 +175,5 @@ class Issue7ProductBpmnDiagnostic(TransactionTestCase):
             ),
             msg=f"unexpected non-terminal status={status!r} err={err!r}",
         )
+        self._assert_no_issue9_gateway_failure(pd, err)
         self._assert_run_detail_contains_bpmn_ui(rid)

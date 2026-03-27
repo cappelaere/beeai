@@ -628,9 +628,31 @@ def select_exclusive_flow(
         gateway_element_id,
         ", ".join(f"{x['flow_id']}={x.get('result', '?')}" for x in evaluated),
     )
-    raise ValueError(
+    sanitized_evaluated = []
+    for item in evaluated:
+        if not isinstance(item, dict):
+            continue
+        sanitized_evaluated.append(
+            {
+                "flow_id": str(item.get("flow_id", "")),
+                "target_id": str(item.get("target_id", "")),
+                "condition": str(item.get("condition", ""))[:120],
+                "result": bool(item.get("result", False)),
+                "error": str(item.get("error", ""))[:240] if item.get("error") else "",
+            }
+        )
+
+    failure_meta = {
+        "gateway_element_id": gateway_element_id,
+        "default_flow_id": str(default_flow_id or ""),
+        "evaluated_flows": sanitized_evaluated,
+    }
+    exc = ValueError(
         f"Exclusive gateway '{gateway_element_id}' has no matching condition and no default flow."
     )
+    # Preserve structured context so runner-path failures can expose real gateway diagnostics.
+    setattr(exc, "gateway_failure_metadata", failure_meta)
+    raise exc
 
 
 def _get_bindings_and_bpmn(workflow_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1259,13 +1281,17 @@ def _resolve_task_execution_context(
             bpmn, current, state, bindings, flow_selector
         )
     except ValueError as e:
+        meta = {"message": str(e)}
+        gateway_meta = getattr(e, "gateway_failure_metadata", None)
+        if isinstance(gateway_meta, dict):
+            meta.update(gateway_meta)
         _raise_engine_failure(
             message=str(e),
             state=state,
             engine_state=engine_state,
             failure_reason="invalid_gateway",
             failed_node_id=current,
-            condition_failure_metadata={"message": str(e)},
+            condition_failure_metadata=meta,
             cause=e,
         )
 
@@ -1630,13 +1656,17 @@ async def run_bpmn_workflow(  # noqa: C901
                 bpmn, current, state, bindings, _flow_selector
             )
         except ValueError as e:
+            meta = {"message": str(e)}
+            gateway_meta = getattr(e, "gateway_failure_metadata", None)
+            if isinstance(gateway_meta, dict):
+                meta.update(gateway_meta)
             _raise_engine_failure(
                 message=str(e),
                 state=state,
                 engine_state=engine_state,
                 failure_reason="invalid_gateway",
                 failed_node_id=current,
-                condition_failure_metadata={"message": str(e)},
+                condition_failure_metadata=meta,
                 cause=e,
             )
 

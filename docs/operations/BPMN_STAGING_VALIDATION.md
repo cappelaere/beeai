@@ -45,7 +45,9 @@ cd agent_ui && ../venv/bin/python manage.py test agent_app.tests.test_workflow_r
 Opt-in module: **`test_issue7_product_bpmn_diagnostic`**. **Not** staging sign-off.
 
 - **`bi_weekly_report`** and **`property_due_diligence`:** tests **require** `completed` on the test DB (sanity for those two flows locally).
-- **`bidder_onboarding`** and **`dap_report`:** **observability only** — terminal status may be `failed` (known BPMN gateway issues; [issue #9](https://github.com/cappelaere/beeai/issues/9)).
+- **`bidder_onboarding`** and **`dap_report`:** observability-focused, but now
+  with an explicit guard: runs must **not** fail with the historical issue #9
+  gateway error (`no matching condition and no default flow`).
 
 ```bash
 cd agent_ui && ISSUE7_PRODUCT_BPMN_DIAGNOSTIC=1 ../venv/bin/python manage.py test \
@@ -163,7 +165,7 @@ Product workflows in the local pass did not reach **waiting_for_task** for manua
 
 | Issue | Summary |
 |-------|---------|
-| [#9](https://github.com/cappelaere/beeai/issues/9) | **`bidder_onboarding` / `dap_report`:** Exclusive gateways **`Gateway_SAM_Decision`** and **`Gateway_1`** — no matching condition / default after handler transitions (example run IDs `494034f4`, `121edda3` on test DB). |
+| [#9](https://github.com/cappelaere/beeai/issues/9) | Added runner-path regressions for **`bidder_onboarding`** and **`dap_report`** that verify execution reaches and routes through **`Gateway_SAM_Decision`** / **`Gateway_1`** with active `currentVersion` BPMN assets; diagnostic tests now assert the historical no-match/no-default gateway error does not recur. |
 | **Branch fix (import)** | **`dap_report`:** load `agent_runner` via `importlib` from repo-relative path so `import agent_ui.agent_runner` is not shadowed when `sys.path` includes `agent_ui/` (`workflows/dap_report/workflow.py`). |
 
 ---
