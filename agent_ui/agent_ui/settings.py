@@ -262,6 +262,9 @@ WEBSITE_ANALYTICS_ENABLED = os.environ.get("WEBSITE_ANALYTICS_ENABLED", "1").low
     "true",
     "yes",
 )
+WEBSITE_ANALYTICS_TIMESCALE_ENABLED = os.environ.get(
+    "WEBSITE_ANALYTICS_TIMESCALE_ENABLED", "1"
+).lower() in ("1", "true", "yes")
 WEBSITE_ANALYTICS_EXCLUDED_PATH_PREFIXES = (
     "/api/",
     "/static/",

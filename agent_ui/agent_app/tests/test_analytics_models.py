@@ -40,8 +40,11 @@ class AnalyticsModelTests(TestCase):
         self.assertEqual(event.app_user_id, 9)
         self.assertTrue(event.session_key_hash)
         self.assertTrue(event.visitor_id)
+        self.assertNotEqual(event.visitor_id, event.session_key_hash[:20])
 
     def test_page_view_model_has_no_ip_field(self):
         field_names = {field.name for field in PageViewEvent._meta.get_fields()}
         self.assertNotIn("ip_address", field_names)
+        self.assertNotIn("raw_querystring", field_names)
+        self.assertNotIn("querystring", field_names)
 

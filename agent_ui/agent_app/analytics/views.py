@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 
 from django.http import HttpRequest, JsonResponse
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 
 from .constants import MAX_LOCATION_VALUE_LENGTH
@@ -17,6 +18,7 @@ def _clean(value: object) -> str:
 
 
 @require_POST
+@csrf_protect
 def analytics_location_api(request: HttpRequest) -> JsonResponse:
     """
     Store client-provided location fallback in session.

@@ -8,7 +8,7 @@ from __future__ import annotations
 def timescale_setup_sql() -> list[str]:
     """
     SQL statements for hypertable, rollups, and policies.
-    Safe to run idempotently on PostgreSQL+TimescaleDB.
+    Applied as best-effort setup by the migration.
     """
     return [
         "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;",
