@@ -84,4 +84,3 @@ class AnalyticsTimescaleTests(SimpleTestCase):
 
         # Should execute availability check + continue through remaining SQL.
         self.assertGreater(cursor.execute.call_count, 3)
-

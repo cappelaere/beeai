@@ -10,6 +10,7 @@ to continue working after splitting views into separate modules.
 # Chat views
 # Admin views
 from .admin import (
+    analytics_dashboard_view,
     dashboard_view,
     diagram_view,
     docs_view,
@@ -275,6 +276,7 @@ __all__ = [
     "card_favorite_api",
     # Admin
     "dashboard_view",
+    "analytics_dashboard_view",
     "docs_view",
     "tools_view",
     "settings_view",

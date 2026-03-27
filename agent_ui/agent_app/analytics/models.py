@@ -108,4 +108,3 @@ class PageViewEvent(models.Model):
 
     def __str__(self):
         return f"{self.canonical_path} @ {self.event_time.isoformat()}"
-

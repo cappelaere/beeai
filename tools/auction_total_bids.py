@@ -2,7 +2,12 @@ import os
 
 from beeai_framework.tools import StringToolOutput, tool
 
-from tools._auction_api import post_json_with_retry
+try:
+    # Top-level tools import mode (tools dir added to sys.path).
+    from _auction_api import post_json_with_retry
+except ImportError:
+    # Package import mode (from tools import ...).
+    from tools._auction_api import post_json_with_retry
 
 API_BASE = os.environ["API_URL"].rstrip("/")
 AUTH_TOKEN = os.environ["AUTH_TOKEN"]

@@ -24,7 +24,9 @@ class AnalyticsCommandTests(TestCase):
         self.assertEqual(page.key, "chat")
         self.assertTrue(page.enabled)
         params = set(
-            TrackedPageQueryParam.objects.filter(tracked_page=page).values_list("param_name", flat=True)
+            TrackedPageQueryParam.objects.filter(tracked_page=page).values_list(
+                "param_name", flat=True
+            )
         )
         self.assertEqual(params, {"utm_source", "campaign"})
 
@@ -32,4 +34,3 @@ class AnalyticsCommandTests(TestCase):
         call_command("register_tracked_page", "/tools", "--disable")
         page = TrackedPage.objects.get(canonical_path="/tools")
         self.assertFalse(page.enabled)
-

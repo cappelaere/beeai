@@ -20,7 +20,9 @@ def _get_header(request, header_name: str) -> str:
 
 
 def _resolve_from_proxy_headers(request) -> dict[str, str]:
-    header_map = getattr(settings, "WEBSITE_ANALYTICS_LOCATION_HEADER_MAP", DEFAULT_LOCATION_HEADER_MAP)
+    header_map = getattr(
+        settings, "WEBSITE_ANALYTICS_LOCATION_HEADER_MAP", DEFAULT_LOCATION_HEADER_MAP
+    )
     country = ""
     state = ""
     city = ""
@@ -65,4 +67,3 @@ def resolve_location(request) -> dict[str, str]:
         return {**client, "source": "client"}
 
     return {"city": "", "state": "", "country": "", "source": "unknown"}
-

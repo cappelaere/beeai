@@ -40,7 +40,9 @@ def should_consider_request_for_pageview(request, response) -> bool:
 
     path = canonicalize_path(request.path)
     excluded_prefixes = getattr(
-        settings, "WEBSITE_ANALYTICS_EXCLUDED_PATH_PREFIXES", DEFAULT_ANALYTICS_EXCLUDED_PATH_PREFIXES
+        settings,
+        "WEBSITE_ANALYTICS_EXCLUDED_PATH_PREFIXES",
+        DEFAULT_ANALYTICS_EXCLUDED_PATH_PREFIXES,
     )
     if any(path.startswith(prefix) for prefix in excluded_prefixes):
         return False
@@ -146,4 +148,3 @@ def try_create_page_view_event(request) -> None:
         create_page_view_event(request)
     except Exception:
         logger.exception("website analytics capture failed")
-

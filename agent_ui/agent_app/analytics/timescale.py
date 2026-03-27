@@ -111,4 +111,3 @@ def timescale_setup_sql() -> list[str]:
         );
         """,
     ]
-

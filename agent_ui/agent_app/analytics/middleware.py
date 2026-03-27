@@ -20,4 +20,3 @@ class WebsiteAnalyticsMiddleware:
         if should_consider_request_for_pageview(request, response):
             try_create_page_view_event(request)
         return response
-

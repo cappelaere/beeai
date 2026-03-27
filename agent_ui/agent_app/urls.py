@@ -29,6 +29,7 @@ urlpatterns = [
     path("", views.chat_view, name="chat"),
     path("chat/", views.chat_view, name="chat_page"),
     path("dashboard/", views.dashboard_view, name="dashboard"),
+    path("analytics/dashboard/", views.analytics_dashboard_view, name="analytics_dashboard"),
     path("tools/", views.tools_view, name="tools"),
     path("agents/", views.agents_list, name="agents_list"),
     path("agents/studio/", views.agent_studio, name="agent_studio"),
