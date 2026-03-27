@@ -4,6 +4,7 @@ Uses real run_bpmn_workflow and fixtures; no full stack (DB/WS).
 """
 
 import asyncio
+import json
 
 from django.test import TestCase
 
@@ -377,3 +378,6 @@ class BpmnIntegrationTests(TestCase):
         self.assertIsNotNone(e.condition_failure_metadata)
         self.assertIn("message", e.condition_failure_metadata)
         self.assertIn("no matching condition", e.condition_failure_metadata["message"])
+        self.assertIn("gateway_element_id", e.condition_failure_metadata)
+        self.assertIn("evaluated_flows", e.condition_failure_metadata)
+        json.dumps(e.condition_failure_metadata)
