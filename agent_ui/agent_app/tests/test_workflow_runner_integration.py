@@ -92,9 +92,9 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
                     {
                         "gateway": gateway_element_id,
                         "sam_passed": getattr(state, "sam_passed", None),
-                        "default_flow_id": (
-                            bpmn.get("elements", {}).get(gateway_element_id) or {}
-                        ).get("default_flow_id"),
+                        "default_flow_id": (bpmn.get("elements", {}).get(gateway_element_id) or {}).get(
+                            "default_flow_id"
+                        ),
                         "target_id": target_id,
                     }
                 )
@@ -116,9 +116,7 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
 
         with (
             patch("agent_app.bpmn_engine.select_exclusive_flow", side_effect=_spy_select),
-            patch(
-                "workflows.bidder_onboarding.workflow.get_sam_db", return_value=_FakeSamDbContext()
-            ),
+            patch("workflows.bidder_onboarding.workflow.get_sam_db", return_value=_FakeSamDbContext()),
         ):
             asyncio.run(execute_workflow_run(rid, send_message=None))
 
@@ -209,9 +207,9 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
                     {
                         "gateway": gateway_element_id,
                         "has_issues": getattr(state, "has_issues", None),
-                        "default_flow_id": (
-                            bpmn.get("elements", {}).get(gateway_element_id) or {}
-                        ).get("default_flow_id"),
+                        "default_flow_id": (bpmn.get("elements", {}).get(gateway_element_id) or {}).get(
+                            "default_flow_id"
+                        ),
                         "target_id": target_id,
                     }
                 )

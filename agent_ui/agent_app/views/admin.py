@@ -367,10 +367,8 @@ def dashboard_view(request):
 
 
 def _is_internal_authenticated(request) -> bool:
-    if getattr(request, "user", None) is not None and request.user.is_authenticated:
-        return True
-    # Internal app sessions may be auth-less but still carry explicit user context.
-    return request.session.get("user_id") is not None
+    user = getattr(request, "user", None)
+    return bool(user and user.is_authenticated and user.is_staff)
 
 
 def analytics_dashboard_view(request):
@@ -387,7 +385,8 @@ def analytics_dashboard_view(request):
 
     context = {
         "summary": data["summary"],
-        "trend": data["trend"],
+        "trends": data["trends"],
+        "trend_sources": data["trend_sources"],
         "top_pages": data["top_pages"],
         "available_pages": data["pages"],
         "source": data["source"],

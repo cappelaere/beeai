@@ -1,82 +1,71 @@
-/* Internal website analytics dashboard trend chart. */
+/* Internal website analytics dashboard trend charts (no CDN dependency). */
 (function () {
-  var dataElement = document.getElementById("analytics-trend-data");
-  var canvas = document.getElementById("analytics-trend-chart");
-  if (!dataElement || !canvas || typeof Chart === "undefined") {
+  var dataElement = document.getElementById("analytics-trends-data");
+  if (!dataElement) {
     return;
   }
 
-  var rows = [];
+  var trends = {};
   try {
-    rows = JSON.parse(dataElement.textContent || "[]");
+    trends = JSON.parse(dataElement.textContent || "{}");
   } catch (_error) {
-    rows = [];
+    trends = {};
   }
-  if (!Array.isArray(rows) || rows.length === 0) {
+  if (!trends || typeof trends !== "object") {
     return;
   }
 
-  var labels = rows.map(function (item) {
-    var dt = new Date(item.bucket);
-    if (isNaN(dt.getTime())) {
-      return item.bucket || "";
+  function drawLineChart(canvasId, rows) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas || !Array.isArray(rows) || rows.length === 0) {
+      return;
     }
-    return dt.toLocaleString();
-  });
-  var pageViews = rows.map(function (item) {
-    return Number(item.page_views || 0);
-  });
-  var uniqueVisitors = rows.map(function (item) {
-    return Number(item.unique_visitors || 0);
-  });
-  var uniqueUsers = rows.map(function (item) {
-    return Number(item.unique_users || 0);
-  });
+    var context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
 
-  // eslint-disable-next-line no-new
-  new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: "Page views",
-          data: pageViews,
-          borderColor: "#0f62fe",
-          backgroundColor: "rgba(15, 98, 254, 0.15)",
-          tension: 0.25,
-          fill: true,
-        },
-        {
-          label: "Unique visitors",
-          data: uniqueVisitors,
-          borderColor: "#24a148",
-          backgroundColor: "rgba(36, 161, 72, 0.12)",
-          tension: 0.25,
-          fill: false,
-        },
-        {
-          label: "Unique users",
-          data: uniqueUsers,
-          borderColor: "#8a2be2",
-          backgroundColor: "rgba(138, 43, 226, 0.12)",
-          tension: 0.25,
-          fill: false,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            precision: 0,
-          },
-        },
-      },
-    },
-  });
+    var values = rows.map(function (item) {
+      return Number(item.page_views || 0);
+    });
+    var maxValue = Math.max.apply(null, values);
+    var width = canvas.width;
+    var height = canvas.height;
+    var padding = 18;
+    var graphWidth = width - padding * 2;
+    var graphHeight = height - padding * 2;
+
+    context.clearRect(0, 0, width, height);
+    context.strokeStyle = "#d0d7de";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(padding, padding);
+    context.lineTo(padding, height - padding);
+    context.lineTo(width - padding, height - padding);
+    context.stroke();
+
+    if (maxValue <= 0) {
+      return;
+    }
+
+    context.strokeStyle = "#0f62fe";
+    context.lineWidth = 2;
+    context.beginPath();
+    values.forEach(function (value, index) {
+      var x = padding + (graphWidth * index) / Math.max(1, values.length - 1);
+      var y = padding + graphHeight * (1 - value / maxValue);
+      if (index === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    });
+    context.stroke();
+  }
+
+  drawLineChart("analytics-trend-hour", trends.hour);
+  drawLineChart("analytics-trend-day", trends.day);
+  drawLineChart("analytics-trend-week", trends.week);
+  drawLineChart("analytics-trend-month", trends.month);
 })();
 

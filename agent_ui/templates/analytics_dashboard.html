@@ -63,12 +63,46 @@
 
 <div class="card mb-4">
   <div class="card-body">
-    <h5 class="card-title">Traffic trend</h5>
-    {% if trend %}
-      <canvas id="analytics-trend-chart" height="120" aria-label="Traffic trend chart"></canvas>
-    {% else %}
-      <p class="text-muted mb-0">No data in the selected range.</p>
-    {% endif %}
+    <h5 class="card-title">Traffic trends</h5>
+    <p class="text-muted small mb-3">Hourly, daily, weekly, and monthly views for the selected filter window.</p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Hourly</strong>
+            <span class="text-muted small">{{ trend_sources.hour }}</span>
+          </div>
+          <canvas id="analytics-trend-hour" height="160" aria-label="Hourly traffic trend chart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Daily</strong>
+            <span class="text-muted small">{{ trend_sources.day }}</span>
+          </div>
+          <canvas id="analytics-trend-day" height="160" aria-label="Daily traffic trend chart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Weekly</strong>
+            <span class="text-muted small">{{ trend_sources.week }}</span>
+          </div>
+          <canvas id="analytics-trend-week" height="160" aria-label="Weekly traffic trend chart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Monthly</strong>
+            <span class="text-muted small">{{ trend_sources.month }}</span>
+          </div>
+          <canvas id="analytics-trend-month" height="160" aria-label="Monthly traffic trend chart"></canvas>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -104,12 +138,11 @@
   </div>
 </div>
 
-{{ trend|json_script:"analytics-trend-data" }}
+{{ trends|json_script:"analytics-trends-data" }}
 {% endblock %}
 
 {% block extra_js %}
 {{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="{% static 'js/analytics/dashboard_trends.js' %}?v=1.0"></script>
 {% endblock %}
 

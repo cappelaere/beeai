@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from django.db import connection
 from django.db.models import Count, Q
-from django.db.models.functions import TruncDay, TruncHour
+from django.db.models.functions import TruncDay, TruncHour, TruncMonth, TruncWeek
 from django.utils import timezone
 
 from .models import PageViewEvent, TrackedPage
@@ -25,7 +25,6 @@ class DashboardFilters:
     end: datetime
     range_key: str
     page: str
-    granularity: str
 
 
 RANGE_TO_DELTA = {
@@ -40,14 +39,20 @@ def build_dashboard_filters(range_key: str, page: str = "") -> DashboardFilters:
     now = timezone.now()
     effective_range_key = range_key if range_key in RANGE_TO_DELTA else "30d"
     delta = RANGE_TO_DELTA[effective_range_key]
-    granularity = "hour" if delta <= timedelta(days=2) else "day"
     return DashboardFilters(
         start=now - delta,
         end=now,
         range_key=effective_range_key,
         page=(page or "").strip(),
-        granularity=granularity,
     )
+
+
+ROLLUP_VIEW_BY_GRANULARITY = {
+    "hour": "analytics_pageviews_hourly",
+    "day": "analytics_pageviews_daily",
+    "week": "analytics_pageviews_weekly",
+    "month": "analytics_pageviews_monthly",
+}
 
 
 def _postgres_relation_exists(relation_name: str) -> bool:
@@ -60,9 +65,7 @@ def _postgres_relation_exists(relation_name: str) -> bool:
 
 
 def _rollup_view_for_granularity(granularity: str) -> str:
-    if granularity == "hour":
-        return "analytics_pageviews_hourly"
-    return "analytics_pageviews_daily"
+    return ROLLUP_VIEW_BY_GRANULARITY[granularity]
 
 
 def _can_use_rollup(granularity: str) -> bool:
@@ -74,7 +77,11 @@ def _can_use_rollup(granularity: str) -> bool:
 def _bucket_expr(granularity: str):
     if granularity == "hour":
         return TruncHour("event_time")
-    return TruncDay("event_time")
+    if granularity == "day":
+        return TruncDay("event_time")
+    if granularity == "week":
+        return TruncWeek("event_time")
+    return TruncMonth("event_time")
 
 
 def _top_pages_from_events(filters: DashboardFilters) -> list[dict]:
@@ -94,13 +101,13 @@ def _top_pages_from_events(filters: DashboardFilters) -> list[dict]:
     return list(rows)
 
 
-def _trend_from_events(filters: DashboardFilters) -> list[dict]:
+def _trend_from_events(filters: DashboardFilters, granularity: str) -> list[dict]:
     qs = PageViewEvent.objects.filter(event_time__gte=filters.start, event_time__lt=filters.end)
     if filters.page:
         qs = qs.filter(canonical_path=filters.page)
 
     rows = (
-        qs.annotate(bucket=_bucket_expr(filters.granularity))
+        qs.annotate(bucket=_bucket_expr(granularity))
         .values("bucket")
         .annotate(
             page_views=Count("id"),
@@ -132,14 +139,14 @@ def _summary_from_events(filters: DashboardFilters) -> dict:
 
 
 def _summary_from_rollup(filters: DashboardFilters) -> dict:
-    view_name = _rollup_view_for_granularity(filters.granularity)
+    view_name = _rollup_view_for_granularity("day")
     where_parts = ["bucket >= %s", "bucket < %s"]
     params: list = [filters.start, filters.end]
     if filters.page:
         where_parts.append("canonical_path = %s")
         params.append(filters.page)
     where_sql = " AND ".join(where_parts)
-    sql = f"""  # noqa: S608 - view name is fixed from internal allowlist.
+    sql = f"""
         SELECT
             COALESCE(SUM(page_view_count), 0) AS page_views,
             COALESCE(SUM(unique_visitor_count), 0) AS unique_visitors,
@@ -158,14 +165,14 @@ def _summary_from_rollup(filters: DashboardFilters) -> dict:
 
 
 def _top_pages_from_rollup(filters: DashboardFilters) -> list[dict]:
-    view_name = _rollup_view_for_granularity(filters.granularity)
+    view_name = _rollup_view_for_granularity("day")
     where_parts = ["bucket >= %s", "bucket < %s"]
     params: list = [filters.start, filters.end]
     if filters.page:
         where_parts.append("canonical_path = %s")
         params.append(filters.page)
     where_sql = " AND ".join(where_parts)
-    sql = f"""  # noqa: S608 - view name is fixed from internal allowlist.
+    sql = f"""
         SELECT
             canonical_path,
             COALESCE(SUM(page_view_count), 0) AS page_views,
@@ -191,15 +198,15 @@ def _top_pages_from_rollup(filters: DashboardFilters) -> list[dict]:
     ]
 
 
-def _trend_from_rollup(filters: DashboardFilters) -> list[dict]:
-    view_name = _rollup_view_for_granularity(filters.granularity)
+def _trend_from_rollup(filters: DashboardFilters, granularity: str) -> list[dict]:
+    view_name = _rollup_view_for_granularity(granularity)
     where_parts = ["bucket >= %s", "bucket < %s"]
     params: list = [filters.start, filters.end]
     if filters.page:
         where_parts.append("canonical_path = %s")
         params.append(filters.page)
     where_sql = " AND ".join(where_parts)
-    sql = f"""  # noqa: S608 - view name is fixed from internal allowlist.
+    sql = f"""
         SELECT
             bucket,
             COALESCE(SUM(page_view_count), 0) AS page_views,
@@ -237,24 +244,45 @@ def get_dashboard_data(filters: DashboardFilters) -> dict:
     Return summary/trend/top-pages dashboard payload.
     Uses Timescale rollups when available, otherwise raw events.
     """
-    source = "raw_events"
-    if _can_use_rollup(filters.granularity):
+    if _can_use_rollup("day"):
         try:
-            return {
-                "summary": _summary_from_rollup(filters),
-                "trend": _trend_from_rollup(filters),
-                "top_pages": _top_pages_from_rollup(filters),
-                "pages": _available_pages(),
-                "source": f"rollup_{filters.granularity}",
-            }
+            summary = _summary_from_rollup(filters)
+            top_pages = _top_pages_from_rollup(filters)
+            summary_source = "rollup_day"
         except Exception as exc:
-            source = "raw_events_fallback"
-            logger.warning("Rollup query failed; falling back to raw events: %s", exc)
+            logger.warning("Daily rollup query failed; falling back to raw events: %s", exc)
+            summary = _summary_from_events(filters)
+            top_pages = _top_pages_from_events(filters)
+            summary_source = "raw_events_fallback"
+    else:
+        summary = _summary_from_events(filters)
+        top_pages = _top_pages_from_events(filters)
+        summary_source = "raw_events"
+
+    trends: dict[str, list[dict]] = {}
+    trend_sources: dict[str, str] = {}
+    for granularity in ("hour", "day", "week", "month"):
+        if _can_use_rollup(granularity):
+            try:
+                trends[granularity] = _trend_from_rollup(filters, granularity)
+                trend_sources[granularity] = f"rollup_{granularity}"
+                continue
+            except Exception as exc:
+                logger.warning(
+                    "Rollup trend query failed for %s; fallback to raw events: %s",
+                    granularity,
+                    exc,
+                )
+                trend_sources[granularity] = "raw_events_fallback"
+        else:
+            trend_sources[granularity] = "raw_events"
+        trends[granularity] = _trend_from_events(filters, granularity)
 
     return {
-        "summary": _summary_from_events(filters),
-        "trend": _trend_from_events(filters),
-        "top_pages": _top_pages_from_events(filters),
+        "summary": summary,
+        "top_pages": top_pages,
+        "trends": trends,
+        "trend_sources": trend_sources,
         "pages": _available_pages(),
-        "source": source,
+        "source": summary_source,
     }

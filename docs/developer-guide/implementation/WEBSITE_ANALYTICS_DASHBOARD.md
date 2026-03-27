@@ -6,9 +6,9 @@ This adds an internal dashboard for first-party website analytics captured by Is
 
 - Page route: `/analytics/dashboard/`
 - URL name: `analytics_dashboard`
-- Access: internal authenticated users
-  - Django-authenticated users are allowed
-  - session-based users are allowed when `session["user_id"]` is present
+- Access: internal staff users only
+  - requires Django authentication
+  - requires `user.is_staff == True`
 
 Unauthenticated requests receive HTTP `403`.
 
@@ -26,8 +26,10 @@ The dashboard query layer is in:
 Query behavior:
 
 1. Prefer Timescale rollup views for trend/summary/top-pages when available:
-   - `analytics_pageviews_hourly` for short windows
-   - `analytics_pageviews_daily` for larger windows
+   - `analytics_pageviews_hourly`
+   - `analytics_pageviews_daily`
+   - `analytics_pageviews_weekly`
+   - `analytics_pageviews_monthly`
 2. If rollups are unavailable or fail, fallback to raw events:
    - `agent_app_pageviewevent` / `PageViewEvent` ORM queries
 
@@ -39,7 +41,11 @@ The page indicates source mode (`rollup_*`, `raw_events`, or `raw_events_fallbac
   - page views
   - unique visitors
   - unique users
-- Trend chart (Chart.js) using standalone JS:
+- Trend charts (standalone canvas JS, no external CDN dependency):
+  - hourly
+  - daily
+  - weekly
+  - monthly
   - `agent_ui/static/js/analytics/dashboard_trends.js`
 - Top pages table
 - Date/page filter form

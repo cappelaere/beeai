@@ -1,6 +1,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -49,7 +50,6 @@ class AnalyticsDashboardQueryTests(TestCase):
     def test_build_dashboard_filters_defaults_invalid_range(self):
         filters = build_dashboard_filters("not-a-range")
         self.assertEqual(filters.range_key, "30d")
-        self.assertEqual(filters.granularity, "day")
 
     def test_get_dashboard_data_from_raw_events(self):
         filters = build_dashboard_filters("24h")
@@ -57,7 +57,10 @@ class AnalyticsDashboardQueryTests(TestCase):
         self.assertIn(data["source"], {"raw_events", "raw_events_fallback"})
         self.assertEqual(data["summary"]["page_views"], 3)
         self.assertEqual(len(data["top_pages"]), 2)
-        self.assertTrue(data["trend"])
+        self.assertTrue(data["trends"]["hour"])
+        self.assertTrue(data["trends"]["day"])
+        self.assertTrue(data["trends"]["week"])
+        self.assertTrue(data["trends"]["month"])
 
     def test_get_dashboard_data_filters_selected_page(self):
         filters = build_dashboard_filters("24h", "/chat")
@@ -98,6 +101,9 @@ class AnalyticsDashboardQueryTests(TestCase):
         data = get_dashboard_data(build_dashboard_filters("7d"))
         self.assertEqual(data["source"], "rollup_day")
         self.assertEqual(data["summary"]["page_views"], 9)
+        self.assertIn("hour", data["trends"])
+        self.assertIn("week", data["trends"])
+        self.assertIn("month", data["trends"])
 
     @patch("agent_app.analytics.dashboard_queries._can_use_rollup", return_value=True)
     @patch(
@@ -114,6 +120,13 @@ class AnalyticsDashboardViewTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.page = TrackedPage.objects.create(key="chat", canonical_path="/chat", enabled=True)
+        self.user_model = get_user_model()
+        self.staff_user = self.user_model.objects.create_user(
+            username="staff-analytics", password="test-pass", is_staff=True
+        )
+        self.non_staff_user = self.user_model.objects.create_user(
+            username="regular-user", password="test-pass", is_staff=False
+        )
         PageViewEvent.objects.create(
             tracked_page=self.page,
             canonical_path="/chat",
@@ -121,26 +134,30 @@ class AnalyticsDashboardViewTests(TestCase):
             app_user_id=9,
         )
 
-    def _set_internal_session_user(self, user_id=9):
-        session = self.client.session
-        session["user_id"] = user_id
-        session.save()
-
-    def test_dashboard_requires_internal_auth(self):
+    def test_dashboard_requires_staff_auth(self):
         response = self.client.get("/analytics/dashboard/")
         self.assertEqual(response.status_code, 403)
 
-    def test_dashboard_renders_for_internal_session_user(self):
-        self._set_internal_session_user()
+    def test_dashboard_denies_non_staff_user(self):
+        self.client.force_login(self.non_staff_user)
+        response = self.client.get("/analytics/dashboard/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_renders_for_staff_user(self):
+        self.client.force_login(self.staff_user)
         response = self.client.get("/analytics/dashboard/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode("utf-8", errors="replace")
         self.assertIn("Website Analytics", body)
         self.assertIn("/static/js/analytics/dashboard_trends.js", body)
-        self.assertIn("analytics-trend-data", body)
+        self.assertIn("analytics-trends-data", body)
+        self.assertIn("analytics-trend-hour", body)
+        self.assertIn("analytics-trend-day", body)
+        self.assertIn("analytics-trend-week", body)
+        self.assertIn("analytics-trend-month", body)
 
     def test_dashboard_filter_query_params_applied(self):
-        self._set_internal_session_user()
+        self.client.force_login(self.staff_user)
         response = self.client.get("/analytics/dashboard/?range=24h&page=/chat")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["selected_range"], "24h")
