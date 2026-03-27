@@ -90,10 +90,14 @@ class Issue7ProductBpmnDiagnostic(TransactionTestCase):
 
     def _assert_no_issue9_gateway_failure(self, progress_data, error_message):
         error_text = str(error_message or "")
+        failure_reason = ""
         if isinstance(progress_data, dict):
+            failure_reason = str(progress_data.get("failure_reason", "") or "")
             failure_meta = progress_data.get("condition_failure_metadata") or {}
             if isinstance(failure_meta, dict):
                 error_text += " " + str(failure_meta.get("message", ""))
+                error_text += " " + str(failure_meta.get("gateway_element_id", ""))
+        self.assertNotEqual(failure_reason, "invalid_gateway")
         lowered = error_text.lower()
         self.assertNotIn("no matching condition and no default flow", lowered)
 

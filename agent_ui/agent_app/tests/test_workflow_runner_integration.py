@@ -55,28 +55,35 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
         gateway_calls = []
         original_select = bpmn_engine.select_exclusive_flow
 
-        async def _validate_input(self, state):
-            return None
+        class _FakeCursor:
+            def __init__(self, rows):
+                self._rows = rows
 
-        async def _check_property_status(self, state):
-            state.property_active = True
-            state.property_details = {"is_active": True, "is_approved": True}
-            return None
+            def fetchall(self):
+                return self._rows
 
-        async def _check_sam_compliance(self, state):
-            state.sam_passed = False
-            return None
+        class _FakeConn:
+            def execute(self, _query, _params):
+                rows = [
+                    {
+                        "name": "Issue9 Regression Bidder",
+                        "classification": "Entity",
+                        "excluding_agency": "Test Agency",
+                        "exclusion_type": "Debarment",
+                        "active_date": "2025-01-01",
+                        "termination_date": "Indefinite",
+                        "record_status": "Active",
+                        "sam_number": "SAM-ISSUE9",
+                    }
+                ]
+                return _FakeCursor(rows)
 
-        async def _finalize_status(self, state):
-            state.approval_status = "denied"
-            state.is_eligible = False
-            state.requires_manual_review = False
-            state.compliance_summary = "Issue #9 regression path"
-            state.bid_limit = 0.0
-            return None
+        class _FakeSamDbContext:
+            def __enter__(self):
+                return _FakeConn()
 
-        async def _create_audit_log(self, state):
-            return None
+            def __exit__(self, exc_type, exc, tb):
+                return False
 
         def _spy_select(bpmn, gateway_element_id, state, bindings):
             target_id = original_select(bpmn, gateway_element_id, state, bindings)
@@ -109,26 +116,7 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
 
         with (
             patch("agent_app.bpmn_engine.select_exclusive_flow", side_effect=_spy_select),
-            patch(
-                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.validate_input",
-                new=_validate_input,
-            ),
-            patch(
-                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.check_property_status",
-                new=_check_property_status,
-            ),
-            patch(
-                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.check_sam_compliance",
-                new=_check_sam_compliance,
-            ),
-            patch(
-                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.finalize_status",
-                new=_finalize_status,
-            ),
-            patch(
-                "workflows.bidder_onboarding.workflow.BidderOnboardingWorkflow.create_audit_log",
-                new=_create_audit_log,
-            ),
+            patch("workflows.bidder_onboarding.workflow.get_sam_db", return_value=_FakeSamDbContext()),
         ):
             asyncio.run(execute_workflow_run(rid, send_message=None))
 
@@ -149,20 +137,68 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
         gateway_calls = []
         original_select = bpmn_engine.select_exclusive_flow
 
-        async def _retrieve_data(self, state):
-            state.dap_data = [{"portfolio_id": "P1"}]
-            return None
-
-        async def _create_time_series(self, state):
-            state.time_series_data = [{"date": "2025-06-01", "value": 1.0}]
-            state.trends = {"trend": "stable"}
-            return None
-
-        async def _create_analysis(self, state):
-            state.analysis_results = {"ok": True}
-            state.issues_found = []
-            state.has_issues = False
-            return None
+        class _FakeGresAgent:
+            async def process(self, query, _context):
+                q = str(query)
+                if "Retrieve Daily Activity Performance (DAP) data" in q:
+                    return {
+                        "status": "ok",
+                        "data": {
+                            "auctions_active": 1,
+                            "auctions_new": 0,
+                            "auctions_closed": 0,
+                            "total_bids": 2,
+                            "new_bidders": 1,
+                            "average_bid": 1000,
+                            "property_views": 10,
+                            "unique_visitors": 5,
+                            "total_revenue": 2000,
+                            "compliance_checks": 3,
+                            "compliance_failures": 0,
+                            "uptime": 99.9,
+                            "response_time": 120,
+                        },
+                    }
+                if "Retrieve daily metrics from" in q:
+                    return {
+                        "status": "ok",
+                        "data": {
+                            "time_series": [
+                                {
+                                    "date": "2025-05-30",
+                                    "metrics": {
+                                        "auctions": {"active": 1},
+                                        "bidding": {"total_bids": 1},
+                                        "revenue": {"total": 1000},
+                                        "compliance": {"checks_failed": 0},
+                                    },
+                                },
+                                {
+                                    "date": "2025-06-01",
+                                    "metrics": {
+                                        "auctions": {"active": 1},
+                                        "bidding": {"total_bids": 2},
+                                        "revenue": {"total": 2000},
+                                        "compliance": {"checks_failed": 0},
+                                    },
+                                },
+                            ]
+                        },
+                    }
+                # Analysis query
+                return {
+                    "status": "ok",
+                    "data": {
+                        "summary": "Stable performance",
+                        "score": 85,
+                        "highlights": ["No major issues"],
+                        "concerns": [],
+                        "anomalies": [],
+                        "recommendations": ["Continue monitoring"],
+                        "risk_level": "low",
+                        "detailed_analysis": "All key metrics are within expected bounds.",
+                    },
+                }
 
         def _spy_select(bpmn, gateway_element_id, state, bindings):
             target_id = original_select(bpmn, gateway_element_id, state, bindings)
@@ -186,15 +222,7 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
 
         with (
             patch("agent_app.bpmn_engine.select_exclusive_flow", side_effect=_spy_select),
-            patch("workflows.dap_report.workflow.DAPReportWorkflow.retrieve_data", new=_retrieve_data),
-            patch(
-                "workflows.dap_report.workflow.DAPReportWorkflow.create_time_series",
-                new=_create_time_series,
-            ),
-            patch(
-                "workflows.dap_report.workflow.DAPReportWorkflow.create_analysis",
-                new=_create_analysis,
-            ),
+            patch("workflows.dap_report.workflow._get_agent", return_value=_FakeGresAgent()),
         ):
             asyncio.run(execute_workflow_run(rid, send_message=None))
 
