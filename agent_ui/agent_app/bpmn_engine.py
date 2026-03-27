@@ -552,7 +552,7 @@ def evaluate_condition(condition_text: str, state: Any) -> bool:
     return _eval_parsed_condition(parsed, state)
 
 
-def select_exclusive_flow(
+def select_exclusive_flow(  # noqa: C901
     bpmn: dict[str, Any],
     gateway_element_id: str,
     state: Any,
@@ -651,7 +651,7 @@ def select_exclusive_flow(
         f"Exclusive gateway '{gateway_element_id}' has no matching condition and no default flow."
     )
     # Preserve structured context so runner-path failures can expose real gateway diagnostics.
-    setattr(exc, "gateway_failure_metadata", failure_meta)
+    exc.gateway_failure_metadata = failure_meta
     raise exc
 
 
