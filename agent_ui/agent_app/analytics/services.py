@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -62,11 +63,11 @@ def _visitor_id(request, session_key_hash: str) -> str:
         existing = request.session.get("analytics_visitor_id", "")
         if existing:
             return str(existing)
-        if session_key_hash:
-            # Keep deterministic visitor id for the session (no raw session key storage).
-            visitor_id = session_key_hash[:20]
-            request.session["analytics_visitor_id"] = visitor_id
-            return visitor_id
+        # Use a random per-session visitor id (not derived from session hash) to
+        # reduce identifier linkage while still supporting distinct-visitor counts.
+        visitor_id = uuid.uuid4().hex[:20]
+        request.session["analytics_visitor_id"] = visitor_id
+        return visitor_id
     return ""
 
 
