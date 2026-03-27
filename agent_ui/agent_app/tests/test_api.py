@@ -63,10 +63,7 @@ class ChatAPITests(TestCase):
             if response.status_code == 200 and "session_id" in data:
                 session_id = data["session_id"]
                 break
-            if (
-                "database table is locked" in json.dumps(data).lower()
-                and attempt == 0
-            ):
+            if "database table is locked" in json.dumps(data).lower() and attempt == 0:
                 time.sleep(0.1)
                 continue
             self.fail(f"Failed to create chat session: status={response.status_code}, body={data}")
