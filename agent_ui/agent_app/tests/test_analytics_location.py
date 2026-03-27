@@ -45,4 +45,3 @@ class AnalyticsLocationTests(TestCase):
         resolved = resolve_location(request)
         self.assertEqual(resolved["source"], "client")
         self.assertEqual(resolved["city"], "Austin")
-

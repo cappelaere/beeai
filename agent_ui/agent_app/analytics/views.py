@@ -37,4 +37,3 @@ def analytics_location_api(request: HttpRequest) -> JsonResponse:
         "country": _clean(payload.get("country")),
     }
     return JsonResponse({"ok": True})
-

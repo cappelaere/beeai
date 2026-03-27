@@ -44,4 +44,3 @@ def build_filtered_query_params(
             continue
         filtered[norm_key] = cleaned_values[0] if len(cleaned_values) == 1 else cleaned_values
     return filtered
-

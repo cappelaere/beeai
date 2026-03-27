@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Website Analytics - RealtyIQ Agent{% endblock %}
+
+{% block content %}
+<div class="content-header">
+  <h2>Website Analytics</h2>
+  <p class="text-muted">Internal traffic view for tracked pages</p>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="range" class="form-label">Date range</label>
+        <select id="range" name="range" class="form-select">
+          {% for option in range_options %}
+            <option value="{{ option }}" {% if option == selected_range %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label for="page" class="form-label">Page</label>
+        <select id="page" name="page" class="form-select">
+          <option value="">All tracked pages</option>
+          {% for item in available_pages %}
+            <option value="{{ item.canonical_path }}" {% if item.canonical_path == selected_page %}selected{% endif %}>
+              {{ item.canonical_path }}{% if item.name %} — {{ item.name }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-primary w-100">Apply filters</button>
+      </div>
+    </form>
+    <div class="mt-3 text-muted small">
+      Data source: <code>{{ source }}</code>
+    </div>
+  </div>
+</div>
+
+<div class="metrics-grid mb-4">
+  <div class="metric-card">
+    <div class="metric-content">
+      <div class="metric-label">Page views</div>
+      <div class="metric-value">{{ summary.page_views }}</div>
+    </div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-content">
+      <div class="metric-label">Unique visitors</div>
+      <div class="metric-value">{{ summary.unique_visitors }}</div>
+    </div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-content">
+      <div class="metric-label">Unique users</div>
+      <div class="metric-value">{{ summary.unique_users }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Traffic trends</h5>
+    <p class="text-muted small mb-3">Hourly, daily, weekly, and monthly views for the selected filter window.</p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Hourly</strong>
+            <span class="text-muted small">{{ trend_sources.hour }}</span>
+          </div>
+          <canvas id="analytics-trend-hour" height="160" aria-label="Hourly traffic trend chart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Daily</strong>
+            <span class="text-muted small">{{ trend_sources.day }}</span>
+          </div>
+          <canvas id="analytics-trend-day" height="160" aria-label="Daily traffic trend chart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Weekly</strong>
+            <span class="text-muted small">{{ trend_sources.week }}</span>
+          </div>
+          <canvas id="analytics-trend-week" height="160" aria-label="Weekly traffic trend chart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Monthly</strong>
+            <span class="text-muted small">{{ trend_sources.month }}</span>
+          </div>
+          <canvas id="analytics-trend-month" height="160" aria-label="Monthly traffic trend chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Top pages</h5>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Page</th>
+            <th class="text-end">Page views</th>
+            <th class="text-end">Unique visitors</th>
+            <th class="text-end">Unique users</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in top_pages %}
+            <tr>
+              <td><code>{{ row.canonical_path }}</code></td>
+              <td class="text-end">{{ row.page_views }}</td>
+              <td class="text-end">{{ row.unique_visitors }}</td>
+              <td class="text-end">{{ row.unique_users }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">No page analytics for this selection.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{{ trends|json_script:"analytics-trends-data" }}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="{% static 'js/analytics/dashboard_trends.js' %}?v=1.0"></script>
+{% endblock %}
+

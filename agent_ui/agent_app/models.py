@@ -593,4 +593,4 @@ class WorkflowVersion(models.Model):
 
 # Analytics models live in a dedicated module but are re-exported here so Django
 # discovers them under agent_app.models.
-from .analytics.models import PageViewEvent, TrackedPage, TrackedPageQueryParam  # noqa: E402
+from .analytics.models import PageViewEvent, TrackedPage, TrackedPageQueryParam  # noqa: E402,F401

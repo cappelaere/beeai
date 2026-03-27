@@ -37,32 +37,53 @@ class Command(BaseCommand):
             help="Enable tracking for this page.",
         )
 
-    @transaction.atomic
-    def handle(self, *args, **options):
+    def _validate_toggle_flags(self, options: dict) -> None:
         if options["disable"] and options["enable"]:
             raise CommandError("Use only one of --disable or --enable.")
 
-        canonical_path = str(options["canonical_path"] or "").strip()
+    def _normalize_canonical_path(self, raw_path: str) -> str:
+        canonical_path = str(raw_path or "").strip()
         if not canonical_path:
             raise CommandError("canonical_path is required.")
         if not canonical_path.startswith("/"):
             canonical_path = f"/{canonical_path}"
         if canonical_path != "/" and canonical_path.endswith("/"):
             canonical_path = canonical_path[:-1]
+        return canonical_path
 
-        key = str(options["key"] or "").strip()
+    def _resolve_key(self, raw_key: str, canonical_path: str) -> str:
+        key = str(raw_key or "").strip()
         if not key:
             key = slugify(canonical_path.strip("/")) or "root"
         key = slugify(key)
         if not key:
             raise CommandError("Could not derive a valid key.")
+        return key
+
+    def _resolve_enabled(self, options: dict) -> bool:
+        return not options["disable"]
+
+    def _save_selected_params(self, tracked_page: TrackedPage, raw_params: list[str]) -> int:
+        created_params = 0
+        for raw_param in raw_params:
+            param_name = (raw_param or "").strip().lower()
+            if not param_name:
+                continue
+            _, was_created = TrackedPageQueryParam.objects.get_or_create(
+                tracked_page=tracked_page, param_name=param_name
+            )
+            if was_created:
+                created_params += 1
+        return created_params
+
+    @transaction.atomic
+    def handle(self, *args, **options):
+        self._validate_toggle_flags(options)
+        canonical_path = self._normalize_canonical_path(options["canonical_path"])
+        key = self._resolve_key(options["key"], canonical_path)
 
         name = str(options["name"] or "").strip()
-        enabled = True
-        if options["disable"]:
-            enabled = False
-        elif options["enable"]:
-            enabled = True
+        enabled = self._resolve_enabled(options)
 
         tracked_page, created = TrackedPage.objects.update_or_create(
             canonical_path=canonical_path,
@@ -76,16 +97,7 @@ class Command(BaseCommand):
         if options["clear_params"]:
             tracked_page.allowed_query_params.all().delete()
 
-        created_params = 0
-        for raw_param in options["params"]:
-            param_name = (raw_param or "").strip().lower()
-            if not param_name:
-                continue
-            _, was_created = TrackedPageQueryParam.objects.get_or_create(
-                tracked_page=tracked_page, param_name=param_name
-            )
-            if was_created:
-                created_params += 1
+        created_params = self._save_selected_params(tracked_page, options["params"])
 
         action = "created" if created else "updated"
         self.stdout.write(
@@ -94,4 +106,3 @@ class Command(BaseCommand):
                 f"enabled={tracked_page.enabled} new_params={created_params}"
             )
         )
-

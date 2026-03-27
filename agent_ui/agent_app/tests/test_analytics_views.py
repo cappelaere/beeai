@@ -32,4 +32,3 @@ class AnalyticsViewsTests(TestCase):
             session.get("analytics_client_location"),
             {"city": "Austin", "state": "TX", "country": "US"},
         )
-

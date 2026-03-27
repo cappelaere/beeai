@@ -47,4 +47,3 @@ class AnalyticsModelTests(TestCase):
         self.assertNotIn("ip_address", field_names)
         self.assertNotIn("raw_querystring", field_names)
         self.assertNotIn("querystring", field_names)
-

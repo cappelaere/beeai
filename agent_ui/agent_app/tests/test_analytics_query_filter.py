@@ -23,4 +23,3 @@ class AnalyticsQueryFilterTests(TestCase):
         raw = QueryDict("tag=a&tag=b")
         out = build_filtered_query_params(raw, allowlist=["tag"], denylist=[])
         self.assertEqual(out, {"tag": ["a", "b"]})
-

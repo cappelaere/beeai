@@ -58,4 +58,3 @@ DEFAULT_ANALYTICS_EXCLUDED_PATH_PREFIXES = (
     "/ping",
     "/favicon.ico",
 )
-

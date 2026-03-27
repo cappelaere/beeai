@@ -17,6 +17,11 @@ from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFoun
 from django.shortcuts import render
 from django.utils import timezone
 
+from agent_app.analytics.dashboard_queries import (
+    RANGE_TO_DELTA,
+    build_dashboard_filters,
+    get_dashboard_data,
+)
 from agent_app.constants import ANONYMOUS_USER_ID
 from agent_app.models import (
     AssistantCard,
@@ -359,6 +364,37 @@ def dashboard_view(request):
         "dashboard.html",
         {"stats": stats, "services": services_health, "overall_status": overall_status},
     )
+
+
+def _is_internal_authenticated(request) -> bool:
+    user = getattr(request, "user", None)
+    return bool(user and user.is_authenticated and user.is_staff)
+
+
+def analytics_dashboard_view(request):
+    """
+    Internal website analytics dashboard (Issue #14).
+    """
+    if not _is_internal_authenticated(request):
+        return HttpResponseForbidden("Authentication required")
+
+    selected_range = str(request.GET.get("range", "30d") or "30d")
+    selected_page = str(request.GET.get("page", "") or "").strip()
+    filters = build_dashboard_filters(selected_range, selected_page)
+    data = get_dashboard_data(filters)
+
+    context = {
+        "summary": data["summary"],
+        "trends": data["trends"],
+        "trend_sources": data["trend_sources"],
+        "top_pages": data["top_pages"],
+        "available_pages": data["pages"],
+        "source": data["source"],
+        "selected_range": filters.range_key,
+        "selected_page": filters.page,
+        "range_options": list(RANGE_TO_DELTA.keys()),
+    }
+    return render(request, "analytics_dashboard.html", context)
 
 
 # ===== Docs View with Helper Functions =====
