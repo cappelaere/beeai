@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import yaml
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from agent_app.bpmn_conditions import is_supported_condition_syntax
 
@@ -40,9 +42,7 @@ _BPMN_EXECUTION_TYPES = {
 }
 # PAR-016: subProcess shell is parsed separately (not in _BPMN_EXECUTION_TYPES counts baseline)
 
-_BOUNDARY_ATTACHABLE_TYPES = frozenset(
-    {"serviceTask", "userTask", "task", "scriptTask"}
-)
+_BOUNDARY_ATTACHABLE_TYPES = frozenset({"serviceTask", "userTask", "task", "scriptTask"})
 
 
 def iso8601_duration_to_seconds(duration: str) -> float | None:
@@ -99,40 +99,68 @@ def boundary_events_for_task(bpmn: dict[str, Any], task_id: str) -> list[dict[st
     return out
 
 
-def _parse_one_boundary_event(child: Any, summary: dict[str, Any]) -> None:
-    """Register a single boundaryEvent element (PAR-014)."""
-    flows = summary.get("sequence_flows") or {}
-    bid = child.get("id")
-    attached = (child.get("attachedToRef") or "").strip()
-    if not bid or not attached:
-        return
-    cancel_raw = (child.get("cancelActivity") or "true").strip().lower()
-    interrupting = cancel_raw != "false"
-
+def _boundary_event_definitions(child: Any) -> tuple[Any | None, Any | None]:
     timer_def = child.find(f"{{{BPMN_MODEL_NS}}}timerEventDefinition")
     if timer_def is None:
         timer_def = child.find("timerEventDefinition")
     error_def = child.find(f"{{{BPMN_MODEL_NS}}}errorEventDefinition")
     if error_def is None:
         error_def = child.find("errorEventDefinition")
+    return timer_def, error_def
 
-    kind: str | None = None
-    duration_iso: str | None = None
+
+def _boundary_event_kind(timer_def: Any, error_def: Any) -> tuple[str, str | None]:
     if timer_def is not None:
-        kind = "timer"
         td = timer_def.find(f"{{{BPMN_MODEL_NS}}}timeDuration")
         if td is None:
             td = timer_def.find("timeDuration")
-        if td is not None and td.text:
-            duration_iso = td.text.strip()
-    elif error_def is not None:
-        kind = "error"
-    else:
-        kind = "unsupported"
+        duration_iso = td.text.strip() if td is not None and td.text else None
+        return "timer", duration_iso
+    if error_def is not None:
+        return "error", None
+    return "unsupported", None
 
-    outs = [f for f in flows.values() if f.get("source") == bid]
-    target = (outs[0].get("target") if len(outs) == 1 else None) or ""
-    flow_id = (outs[0].get("id") if len(outs) == 1 else None) or ""
+
+def _boundary_event_outgoing(summary: dict[str, Any], boundary_id: str) -> tuple[str, str, int]:
+    flows = summary.get("sequence_flows") or {}
+    outs = [f for f in flows.values() if f.get("source") == boundary_id]
+    if len(outs) != 1:
+        return "", "", len(outs)
+    return str(outs[0].get("target") or ""), str(outs[0].get("id") or ""), len(outs)
+
+
+def _save_boundary_event_entry(
+    summary: dict[str, Any], attached: str, kind: str, entry: dict[str, Any]
+) -> None:
+    bucket = summary["boundary_by_task"].setdefault(attached, {})
+    if kind == "timer":
+        if "timer" in bucket:
+            summary.setdefault("boundary_duplicate_timers", []).append(
+                (attached, entry["boundary_id"])
+            )
+        bucket["timer"] = entry
+        return
+    if kind == "error":
+        if "error" in bucket:
+            summary.setdefault("boundary_duplicate_errors", []).append(
+                (attached, entry["boundary_id"])
+            )
+        bucket["error"] = entry
+        return
+    summary.setdefault("boundary_unsupported", []).append(entry)
+
+
+def _parse_one_boundary_event(child: Any, summary: dict[str, Any]) -> None:
+    """Register a single boundaryEvent element (PAR-014)."""
+    bid = child.get("id")
+    attached = (child.get("attachedToRef") or "").strip()
+    if not bid or not attached:
+        return
+    cancel_raw = (child.get("cancelActivity") or "true").strip().lower()
+    interrupting = cancel_raw != "false"
+    timer_def, error_def = _boundary_event_definitions(child)
+    kind, duration_iso = _boundary_event_kind(timer_def, error_def)
+    target, flow_id, outgoing_count = _boundary_event_outgoing(summary, bid)
 
     entry = {
         "boundary_id": bid,
@@ -142,19 +170,9 @@ def _parse_one_boundary_event(child: Any, summary: dict[str, Any]) -> None:
         "flow_id": flow_id,
         "duration_iso": duration_iso,
         "interrupting": interrupting,
-        "outgoing_count": len(outs),
+        "outgoing_count": outgoing_count,
     }
-    bucket = summary["boundary_by_task"].setdefault(attached, {})
-    if kind == "timer":
-        if "timer" in bucket:
-            summary.setdefault("boundary_duplicate_timers", []).append((attached, bid))
-        bucket["timer"] = entry
-    elif kind == "error":
-        if "error" in bucket:
-            summary.setdefault("boundary_duplicate_errors", []).append((attached, bid))
-        bucket["error"] = entry
-    else:
-        summary.setdefault("boundary_unsupported", []).append(entry)
+    _save_boundary_event_entry(summary, attached, kind, entry)
 
 
 def _walk_parse_boundary_events(el: Any, summary: dict[str, Any]) -> None:
@@ -207,6 +225,67 @@ def _intermediate_catch_fields_from_element(child: Any) -> dict[str, Any]:
     }
 
 
+def _record_sequence_flow(child: Any, summary: dict[str, Any], element_id: str) -> None:
+    condition_text = ""
+    condition = child.find("bpmn:conditionExpression", BPMN_NAMESPACES)
+    if condition is not None and condition.text:
+        condition_text = condition.text.strip()
+    summary["sequence_flows"][element_id] = {
+        "id": element_id,
+        "name": child.get("name", ""),
+        "source": child.get("sourceRef"),
+        "target": child.get("targetRef"),
+        "condition": condition_text,
+    }
+
+
+def _record_subprocess_element(
+    child: Any, summary: dict[str, Any], element_id: str, container_id: str | None
+) -> None:
+    if container_id is not None:
+        summary.setdefault("nested_subprocess_pairs", []).append((container_id, element_id))
+    sp_elem: dict[str, Any] = {
+        "id": element_id,
+        "name": child.get("name", ""),
+        "type": "subProcess",
+        "incoming_flow_ids": [],
+        "outgoing_flow_ids": [],
+        "incoming": [],
+        "outgoing": [],
+    }
+    if container_id is not None:
+        sp_elem["subprocess_container"] = container_id
+    summary["elements"][element_id] = sp_elem
+    summary["ordered_element_ids"].append(element_id)
+    if container_id is None:
+        summary.setdefault("subprocess_root_ids", []).append(element_id)
+    _parse_container_children(child, summary, element_id)
+
+
+def _record_executable_element(
+    child: Any, summary: dict[str, Any], element_id: str, lt: str, container_id: str | None
+) -> None:
+    elem_data: dict[str, Any] = {
+        "id": element_id,
+        "name": child.get("name", ""),
+        "type": lt,
+        "incoming_flow_ids": [],
+        "outgoing_flow_ids": [],
+        "incoming": [],
+        "outgoing": [],
+    }
+    if container_id is not None:
+        elem_data["subprocess_container"] = container_id
+    if lt == "exclusiveGateway":
+        elem_data["default_flow_id"] = child.get("default") or None
+    if lt == "intermediateCatchEvent":
+        elem_data.update(_intermediate_catch_fields_from_element(child))
+    summary["elements"][element_id] = elem_data
+    summary["ordered_element_ids"].append(element_id)
+    if lt == "serviceTask":
+        summary["ordered_service_task_ids"].append(element_id)
+
+
 def _parse_container_children(
     container_el: Any, summary: dict[str, Any], container_id: str | None
 ) -> None:
@@ -214,68 +293,17 @@ def _parse_container_children(
     for child in list(container_el):
         lt = _local_name(child.tag)
         eid = child.get("id")
-
+        if not eid:
+            continue
         if lt == "sequenceFlow":
-            if not eid:
-                continue
-            condition_text = ""
-            condition = child.find("bpmn:conditionExpression", BPMN_NAMESPACES)
-            if condition is not None and condition.text:
-                condition_text = condition.text.strip()
-            summary["sequence_flows"][eid] = {
-                "id": eid,
-                "name": child.get("name", ""),
-                "source": child.get("sourceRef"),
-                "target": child.get("targetRef"),
-                "condition": condition_text,
-            }
+            _record_sequence_flow(child, summary, eid)
             continue
-
         if lt == "subProcess":
-            if not eid:
-                continue
-            if container_id is not None:
-                summary.setdefault("nested_subprocess_pairs", []).append((container_id, eid))
-            sp_elem: dict[str, Any] = {
-                "id": eid,
-                "name": child.get("name", ""),
-                "type": "subProcess",
-                "incoming_flow_ids": [],
-                "outgoing_flow_ids": [],
-                "incoming": [],
-                "outgoing": [],
-            }
-            if container_id is not None:
-                sp_elem["subprocess_container"] = container_id
-            summary["elements"][eid] = sp_elem
-            summary["ordered_element_ids"].append(eid)
-            if container_id is None:
-                summary.setdefault("subprocess_root_ids", []).append(eid)
-            _parse_container_children(child, summary, eid)
+            _record_subprocess_element(child, summary, eid, container_id)
             continue
-
-        if lt not in _BPMN_EXECUTION_TYPES or not eid:
+        if lt not in _BPMN_EXECUTION_TYPES:
             continue
-
-        elem_data: dict[str, Any] = {
-            "id": eid,
-            "name": child.get("name", ""),
-            "type": lt,
-            "incoming_flow_ids": [],
-            "outgoing_flow_ids": [],
-            "incoming": [],
-            "outgoing": [],
-        }
-        if container_id is not None:
-            elem_data["subprocess_container"] = container_id
-        if lt == "exclusiveGateway":
-            elem_data["default_flow_id"] = child.get("default") or None
-        if lt == "intermediateCatchEvent":
-            elem_data.update(_intermediate_catch_fields_from_element(child))
-        summary["elements"][eid] = elem_data
-        summary["ordered_element_ids"].append(eid)
-        if lt == "serviceTask":
-            summary["ordered_service_task_ids"].append(eid)
+        _record_executable_element(child, summary, eid, lt, container_id)
 
 
 def _local_name(tag: str) -> str:
@@ -333,6 +361,56 @@ def _get_field_description_from_annotation(node: ast.AST) -> str:
     return ""
 
 
+def _collect_state_fields(node: ast.ClassDef) -> tuple[list[str], dict[str, str]]:
+    skip = {"workflow_steps", "model_config"}
+    fields: list[str] = []
+    descriptions: dict[str, str] = {}
+    for item in node.body:
+        if not isinstance(item, ast.AnnAssign) or not isinstance(item.target, ast.Name):
+            continue
+        name = item.target.id
+        if name in skip or name.startswith("_"):
+            continue
+        fields.append(name)
+        if item.value and isinstance(item.value, ast.Call):
+            desc = _get_field_description_from_annotation(item.value)
+            if desc:
+                descriptions[name] = desc
+    return fields, descriptions
+
+
+def _collect_workflow_methods(node: ast.ClassDef) -> list[dict[str, Any]]:
+    methods: list[dict[str, Any]] = []
+    for item in node.body:
+        if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = [arg.arg for arg in item.args.args if arg.arg not in {"self", "cls"}]
+        methods.append(
+            {
+                "name": item.name,
+                "line": getattr(item, "lineno", None),
+                "is_async": isinstance(item, ast.AsyncFunctionDef),
+                "args": args,
+                "docstring": ast.get_docstring(item) or "",
+            }
+        )
+    return methods
+
+
+def _populate_workflow_python_classes(result: dict[str, Any], tree: ast.Module) -> None:
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if node.name.endswith("State") and not result["state_class_name"]:
+            result["state_class_name"] = node.name
+            field_names, field_desc = _collect_state_fields(node)
+            result["state_field_names"] = field_names
+            result["state_field_descriptions"] = field_desc
+        if node.name.endswith("Workflow") and not result["workflow_class_name"]:
+            result["workflow_class_name"] = node.name
+            result["methods"] = _collect_workflow_methods(node)
+
+
 def parse_workflow_python(workflow_py: str) -> dict[str, Any]:
     result: dict[str, Any] = {
         "workflow_class_name": None,
@@ -352,35 +430,7 @@ def parse_workflow_python(workflow_py: str) -> dict[str, Any]:
         result["parse_error"] = str(exc)
         return result
 
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            if node.name.endswith("State") and not result["state_class_name"]:
-                result["state_class_name"] = node.name
-                # Collect state class field names (and descriptions from Field) for input_schema
-                skip = {"workflow_steps", "model_config"}
-                for item in node.body:
-                    if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-                        name = item.target.id
-                        if name in skip or name.startswith("_"):
-                            continue
-                        result["state_field_names"].append(name)
-                        if item.value and isinstance(item.value, ast.Call):
-                            desc = _get_field_description_from_annotation(item.value)
-                            if desc:
-                                result["state_field_descriptions"][name] = desc
-            if node.name.endswith("Workflow") and not result["workflow_class_name"]:
-                result["workflow_class_name"] = node.name
-                for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        args = [arg.arg for arg in item.args.args if arg.arg not in {"self", "cls"}]
-                        method = {
-                            "name": item.name,
-                            "line": getattr(item, "lineno", None),
-                            "is_async": isinstance(item, ast.AsyncFunctionDef),
-                            "args": args,
-                            "docstring": ast.get_docstring(item) or "",
-                        }
-                        result["methods"].append(method)
+    _populate_workflow_python_classes(result, tree)
 
     handler_names = []
     for method in result["methods"]:
@@ -402,19 +452,19 @@ def parse_bpmn_xml(bpmn_xml: str) -> dict[str, Any]:
         "counts": {},
     }
     if not bpmn_xml.strip():
-        summary["counts"] = {kind: 0 for kind in _BPMN_EXECUTION_TYPES}
+        summary["counts"] = dict.fromkeys(_BPMN_EXECUTION_TYPES, 0)
         return summary
 
     try:
-        root = ET.fromstring(bpmn_xml)
+        root = safe_fromstring(bpmn_xml)
     except ET.ParseError as exc:
         summary["parse_error"] = str(exc)
-        summary["counts"] = {kind: 0 for kind in _BPMN_EXECUTION_TYPES}
+        summary["counts"] = dict.fromkeys(_BPMN_EXECUTION_TYPES, 0)
         return summary
 
     process = root.find("bpmn:process", BPMN_NAMESPACES)
     if process is None:
-        summary["counts"] = {kind: 0 for kind in _BPMN_EXECUTION_TYPES}
+        summary["counts"] = dict.fromkeys(_BPMN_EXECUTION_TYPES, 0)
         return summary
 
     summary["process_id"] = process.get("id")
@@ -434,7 +484,7 @@ def parse_bpmn_xml(bpmn_xml: str) -> dict[str, Any]:
             summary["elements"][target]["incoming_flow_ids"].append(flow["id"])
             summary["elements"][target]["incoming"].append(source)
 
-    counts: dict[str, int] = {kind: 0 for kind in _BPMN_EXECUTION_TYPES}
+    counts: dict[str, int] = dict.fromkeys(_BPMN_EXECUTION_TYPES, 0)
     counts["subProcess"] = 0
     for element in summary["elements"].values():
         t = element.get("type") or ""
@@ -472,6 +522,122 @@ FlowSelector = Callable[
 ]
 
 
+def _traverse_recursive(
+    *,
+    bpmn: dict[str, Any],
+    target: str | None,
+    seen: set[str],
+    state: Any,
+    bindings: dict[str, Any] | None,
+    flow_selector: FlowSelector | None,
+) -> str | None:
+    return _traverse_until_executable(
+        bpmn, target, seen, state, bindings, flow_selector, from_completed=False
+    )
+
+
+def _traverse_task_or_end(
+    *,
+    start_element_id: str,
+    element: dict[str, Any],
+    from_completed: bool,
+    bpmn: dict[str, Any],
+    seen: set[str],
+    state: Any,
+    bindings: dict[str, Any] | None,
+    flow_selector: FlowSelector | None,
+) -> str | None:
+    el_type = element.get("type", "")
+    if el_type in {"serviceTask", "userTask", "task", "scriptTask"}:
+        out = element.get("outgoing") or []
+        if from_completed and len(out) == 1:
+            return _traverse_recursive(
+                bpmn=bpmn,
+                target=out[0],
+                seen=seen,
+                state=state,
+                bindings=bindings,
+                flow_selector=flow_selector,
+            )
+        return start_element_id
+    if el_type == "endEvent":
+        return "Workflow.END"
+    return None
+
+
+def _traverse_special_nodes(
+    *,
+    bpmn: dict[str, Any],
+    start_element_id: str,
+    element: dict[str, Any],
+    seen: set[str],
+    state: Any,
+    bindings: dict[str, Any] | None,
+    flow_selector: FlowSelector | None,
+) -> str | None:
+    el_type = element.get("type", "")
+    if el_type == "parallelGateway":
+        inc = element.get("incoming") or []
+        out = element.get("outgoing") or []
+        if len(inc) >= 2 and len(out) == 1:
+            return f"Workflow.PARALLEL_JOIN:{start_element_id}"
+    if el_type == "subProcess":
+        sid = subprocess_internal_start_event_id(bpmn, start_element_id)
+        if not sid:
+            return None
+        inner_start = (bpmn.get("elements") or {}).get(sid) or {}
+        outgoing = inner_start.get("outgoing") or []
+        if len(outgoing) != 1:
+            return None
+        return _traverse_recursive(
+            bpmn=bpmn,
+            target=outgoing[0],
+            seen=set(seen),
+            state=state,
+            bindings=bindings,
+            flow_selector=flow_selector,
+        )
+    if el_type == "intermediateCatchEvent" and element.get("catch_kind") in ("timer", "message"):
+        return start_element_id
+    return None
+
+
+def _traverse_outgoing_paths(
+    *,
+    bpmn: dict[str, Any],
+    start_element_id: str,
+    element: dict[str, Any],
+    seen: set[str],
+    state: Any,
+    bindings: dict[str, Any] | None,
+    flow_selector: FlowSelector | None,
+) -> str | None:
+    outgoing = element.get("outgoing") or []
+    if len(outgoing) == 1:
+        return _traverse_recursive(
+            bpmn=bpmn,
+            target=outgoing[0],
+            seen=seen,
+            state=state,
+            bindings=bindings,
+            flow_selector=flow_selector,
+        )
+    if len(outgoing) <= 1 or flow_selector is None or state is None or bindings is None:
+        return None
+    flows = resolve_outgoing_flows(bpmn, start_element_id)
+    chosen_target = flow_selector(bpmn, start_element_id, flows, state, bindings)
+    if not chosen_target:
+        return None
+    return _traverse_recursive(
+        bpmn=bpmn,
+        target=chosen_target,
+        seen=seen,
+        state=state,
+        bindings=bindings,
+        flow_selector=flow_selector,
+    )
+
+
 def _traverse_until_executable(
     bpmn: dict[str, Any],
     start_element_id: str | None,
@@ -485,83 +651,41 @@ def _traverse_until_executable(
     if not start_element_id or start_element_id in seen:
         return None
     seen.add(start_element_id)
-    elements = bpmn.get("elements") or {}
-    element = elements.get(start_element_id)
+    element = (bpmn.get("elements") or {}).get(start_element_id)
     if not element:
         return None
-    el_type = element.get("type", "")
-    if el_type in {"serviceTask", "userTask", "task", "scriptTask"}:
-        out = element.get("outgoing") or []
-        if from_completed and len(out) == 1:
-            return _traverse_until_executable(
-                bpmn,
-                out[0],
-                seen,
-                state,
-                bindings,
-                flow_selector,
-                from_completed=False,
-            )
-        return start_element_id
-    if el_type == "endEvent":
-        return "Workflow.END"
-    if el_type == "parallelGateway":
-        inc = element.get("incoming") or []
-        out = element.get("outgoing") or []
-        if len(inc) >= 2 and len(out) == 1:
-            return f"Workflow.PARALLEL_JOIN:{start_element_id}"
-    if el_type == "subProcess":
-        sid = subprocess_internal_start_event_id(bpmn, start_element_id)
-        if not sid:
-            return None
-        st_el = elements.get(sid) or {}
-        inn = st_el.get("outgoing") or []
-        if len(inn) != 1:
-            return None
-        seen2 = set(seen)
-        return _traverse_until_executable(
-            bpmn,
-            inn[0],
-            seen2,
-            state,
-            bindings,
-            flow_selector,
-            from_completed=False,
-        )
-    if el_type == "intermediateCatchEvent":
-        ck = element.get("catch_kind")
-        if ck in ("timer", "message"):
-            return start_element_id
-    outgoing = element.get("outgoing") or []
-    if len(outgoing) == 1:
-        return _traverse_until_executable(
-            bpmn,
-            outgoing[0],
-            seen,
-            state,
-            bindings,
-            flow_selector,
-            from_completed=False,
-        )
-    if (
-        len(outgoing) > 1
-        and flow_selector is not None
-        and state is not None
-        and bindings is not None
-    ):
-        flows = resolve_outgoing_flows(bpmn, start_element_id)
-        chosen_target = flow_selector(bpmn, start_element_id, flows, state, bindings)
-        if chosen_target:
-            return _traverse_until_executable(
-                bpmn,
-                chosen_target,
-                seen,
-                state,
-                bindings,
-                flow_selector,
-                from_completed=False,
-            )
-    return None
+    task_or_end = _traverse_task_or_end(
+        start_element_id=start_element_id,
+        element=element,
+        from_completed=from_completed,
+        bpmn=bpmn,
+        seen=seen,
+        state=state,
+        bindings=bindings,
+        flow_selector=flow_selector,
+    )
+    if task_or_end is not None:
+        return task_or_end
+    special = _traverse_special_nodes(
+        bpmn=bpmn,
+        start_element_id=start_element_id,
+        element=element,
+        seen=seen,
+        state=state,
+        bindings=bindings,
+        flow_selector=flow_selector,
+    )
+    if special is not None:
+        return special
+    return _traverse_outgoing_paths(
+        bpmn=bpmn,
+        start_element_id=start_element_id,
+        element=element,
+        seen=seen,
+        state=state,
+        bindings=bindings,
+        flow_selector=flow_selector,
+    )
 
 
 def traverse_until_executable(
@@ -711,79 +835,153 @@ def is_subprocess_shell(bpmn: dict[str, Any], element_id: str) -> bool:
     return (bpmn.get("elements") or {}).get(element_id, {}).get("type") == "subProcess"
 
 
-def validate_bpmn_embedded_subprocesses(bpmn: dict[str, Any]) -> list[str]:
-    """PAR-016: embedded subprocess shape (v1)."""
-    errors: list[str] = []
-    elements = bpmn.get("elements") or {}
-    flows = bpmn.get("sequence_flows") or {}
-
+def _append_nested_subprocess_errors(bpmn: dict[str, Any], errors: list[str]) -> None:
     for parent, nested in bpmn.get("nested_subprocess_pairs") or []:
         errors.append(
             f"Nested embedded subprocess '{nested}' inside '{parent}' is not supported in v1. "
             "Suggestion: flatten or use a single subprocess level."
         )
 
+
+def _append_subprocess_shape_errors(
+    *, sp_id: str, sp_el: dict[str, Any], elements: dict[str, Any], errors: list[str]
+) -> None:
+    inside = {eid for eid, el in elements.items() if el.get("subprocess_container") == sp_id}
+    starts = [eid for eid in inside if (elements.get(eid) or {}).get("type") == "startEvent"]
+    if len(starts) != 1:
+        errors.append(
+            f"Subprocess '{sp_id}': exactly one internal startEvent required (found {len(starts)})."
+        )
+    ends = [eid for eid in inside if (elements.get(eid) or {}).get("type") == "endEvent"]
+    if len(ends) < 1:
+        errors.append(f"Subprocess '{sp_id}': at least one internal endEvent required.")
+    inc = sp_el.get("incoming") or []
+    out = sp_el.get("outgoing") or []
+    if len(inc) != 1:
+        errors.append(
+            f"Subprocess '{sp_id}': exactly one incoming flow from parent (found {len(inc)})."
+        )
+    if len(out) != 1:
+        errors.append(
+            f"Subprocess '{sp_id}': exactly one outgoing flow to parent continuation (found {len(out)})."
+        )
+
+
+def _append_subprocess_boundary_crossing_errors(
+    *, sp_id: str, elements: dict[str, Any], flows: dict[str, Any], errors: list[str]
+) -> None:
+    for flow in flows.values():
+        s, t = flow.get("source"), flow.get("target")
+        if not s or not t or s not in elements or t not in elements:
+            continue
+        sin = elements[s].get("subprocess_container") == sp_id
+        tin = elements[t].get("subprocess_container") == sp_id
+        if sin and not tin:
+            errors.append(
+                f"Subprocess '{sp_id}': flow from internal element '{s}' to external '{t}' is not allowed; "
+                "complete via an internal endEvent."
+            )
+        if tin and not sin and t != sp_id and s != sp_id:
+            errors.append(
+                f"Subprocess '{sp_id}': flow into internal '{t}' must come from the subprocess boundary "
+                f"(incoming flow targets the subProcess id), not from '{s}'."
+            )
+
+
+def _append_subprocess_parallel_end_errors(
+    *, bpmn: dict[str, Any], sp_id: str, elements: dict[str, Any], errors: list[str]
+) -> None:
+    for eid, el in elements.items():
+        if el.get("type") != "parallelGateway" or el.get("subprocess_container") != sp_id:
+            continue
+        if not is_parallel_fork_gateway(bpmn, eid):
+            continue
+        for _flow_id, target_id, _ in resolve_outgoing_flows(bpmn, eid):
+            if (elements.get(target_id) or {}).get("type") == "endEvent":
+                errors.append(
+                    f"Parallel gateway '{eid}' inside subprocess '{sp_id}': branch cannot connect "
+                    f"directly to endEvent '{target_id}'."
+                )
+
+
+def validate_bpmn_embedded_subprocesses(bpmn: dict[str, Any]) -> list[str]:
+    """PAR-016: embedded subprocess shape (v1)."""
+    errors: list[str] = []
+    elements = bpmn.get("elements") or {}
+    flows = bpmn.get("sequence_flows") or {}
+    _append_nested_subprocess_errors(bpmn, errors)
+
     for sp_id in bpmn.get("subprocess_root_ids") or []:
         sp_el = elements.get(sp_id) or {}
         if sp_el.get("type") != "subProcess":
             continue
-        inside = {eid for eid, el in elements.items() if el.get("subprocess_container") == sp_id}
-        starts = [eid for eid in inside if (elements.get(eid) or {}).get("type") == "startEvent"]
-        if len(starts) != 1:
-            errors.append(
-                f"Subprocess '{sp_id}': exactly one internal startEvent required (found {len(starts)})."
-            )
-        ends = [eid for eid in inside if (elements.get(eid) or {}).get("type") == "endEvent"]
-        if len(ends) < 1:
-            errors.append(
-                f"Subprocess '{sp_id}': at least one internal endEvent required."
-            )
-        inc = sp_el.get("incoming") or []
-        out = sp_el.get("outgoing") or []
-        if len(inc) != 1:
-            errors.append(
-                f"Subprocess '{sp_id}': exactly one incoming flow from parent (found {len(inc)})."
-            )
-        if len(out) != 1:
-            errors.append(
-                f"Subprocess '{sp_id}': exactly one outgoing flow to parent continuation (found {len(out)})."
-            )
-        for _fid, fl in flows.items():
-            s, t = fl.get("source"), fl.get("target")
-            if not s or not t or s not in elements or t not in elements:
-                continue
-            sc = elements[s].get("subprocess_container")
-            tc = elements[t].get("subprocess_container")
-            sin = sc == sp_id
-            tin = tc == sp_id
-            if sin and not tin:
-                errors.append(
-                    f"Subprocess '{sp_id}': flow from internal element '{s}' to external '{t}' is not allowed; "
-                    "complete via an internal endEvent."
-                )
-            if tin and not sin and t != sp_id and s != sp_id:
-                errors.append(
-                    f"Subprocess '{sp_id}': flow into internal '{t}' must come from the subprocess boundary "
-                    f"(incoming flow targets the subProcess id), not from '{s}'."
-                )
-
-        for eid, el in elements.items():
-            if el.get("type") != "parallelGateway":
-                continue
-            gsp = el.get("subprocess_container")
-            if not gsp or gsp != sp_id:
-                continue
-            if not is_parallel_fork_gateway(bpmn, eid):
-                continue
-            for _flow_id, tgid, _ in resolve_outgoing_flows(bpmn, eid):
-                tg = elements.get(tgid) or {}
-                if tg.get("type") == "endEvent":
-                    errors.append(
-                        f"Parallel gateway '{eid}' inside subprocess '{sp_id}': branch cannot connect "
-                        f"directly to endEvent '{tgid}'."
-                    )
+        _append_subprocess_shape_errors(sp_id=sp_id, sp_el=sp_el, elements=elements, errors=errors)
+        _append_subprocess_boundary_crossing_errors(
+            sp_id=sp_id, elements=elements, flows=flows, errors=errors
+        )
+        _append_subprocess_parallel_end_errors(
+            bpmn=bpmn, sp_id=sp_id, elements=elements, errors=errors
+        )
 
     return errors
+
+
+def _validate_intermediate_catch_type_and_outgoing(
+    *, eid: str, el: dict[str, Any], errors: list[str]
+) -> tuple[str | None, list[Any]]:
+    ck = el.get("catch_kind")
+    out = el.get("outgoing") or []
+    if ck == "unsupported" or ck not in ("timer", "message"):
+        errors.append(
+            f"Intermediate catch '{eid}': only timer (timeDuration) or message "
+            "(messageEventDefinition) is supported. Suggestion: use a single timer or message catch."
+        )
+        return None, out
+    if len(out) != 1:
+        errors.append(
+            f"Intermediate catch '{eid}': must have exactly one outgoing sequence flow "
+            f"(found {len(out)}). Suggestion: connect exactly one flow after the catch."
+        )
+        return None, out
+    return str(ck), out
+
+
+def _append_intermediate_catch_kind_errors(
+    *,
+    bpmn: dict[str, Any],
+    elements: dict[str, Any],
+    eid: str,
+    el: dict[str, Any],
+    ck: str,
+    out: list[Any],
+    errors: list[str],
+) -> None:
+    if ck == "timer":
+        dur = (el.get("catch_duration_iso") or "").strip()
+        if not dur:
+            errors.append(
+                f"Intermediate catch '{eid}': timer requires bpmn:timeDuration (e.g. PT5M)."
+            )
+        elif iso8601_duration_to_seconds(dur) is None:
+            errors.append(
+                f"Intermediate catch '{eid}': could not parse timeDuration {dur!r}. "
+                "Suggestion: use ISO-8601 duration such as PT1H, PT90S, P1D."
+            )
+    if ck == "message" and not (el.get("catch_message_key") or "").strip():
+        errors.append(
+            f"Intermediate catch '{eid}': message catch requires messageRef or element name."
+        )
+    tgt = out[0]
+    if tgt and str(tgt).strip() in elements:
+        seen: set[str] = set()
+        res = traverse_until_executable(
+            bpmn, str(tgt).strip(), seen, state=None, bindings=None, flow_selector=None
+        )
+        if res is None:
+            errors.append(
+                f"Intermediate catch '{eid}': path after catch does not reach a single "
+                "next executable task (ambiguous gateway or dead end)."
+            )
 
 
 def validate_bpmn_intermediate_catch_events(bpmn: dict[str, Any]) -> list[str]:
@@ -793,48 +991,12 @@ def validate_bpmn_intermediate_catch_events(bpmn: dict[str, Any]) -> list[str]:
     for eid, el in elements.items():
         if el.get("type") != "intermediateCatchEvent":
             continue
-        ck = el.get("catch_kind")
-        out = el.get("outgoing") or []
-        if ck == "unsupported" or ck not in ("timer", "message"):
-            errors.append(
-                f"Intermediate catch '{eid}': only timer (timeDuration) or message "
-                "(messageEventDefinition) is supported. Suggestion: use a single timer or message catch."
-            )
+        ck, out = _validate_intermediate_catch_type_and_outgoing(eid=eid, el=el, errors=errors)
+        if ck is None:
             continue
-        if len(out) != 1:
-            errors.append(
-                f"Intermediate catch '{eid}': must have exactly one outgoing sequence flow "
-                f"(found {len(out)}). Suggestion: connect exactly one flow after the catch."
-            )
-            continue
-        if ck == "timer":
-            dur = (el.get("catch_duration_iso") or "").strip()
-            if not dur:
-                errors.append(
-                    f"Intermediate catch '{eid}': timer requires bpmn:timeDuration (e.g. PT5M)."
-                )
-            elif iso8601_duration_to_seconds(dur) is None:
-                errors.append(
-                    f"Intermediate catch '{eid}': could not parse timeDuration {dur!r}. "
-                    "Suggestion: use ISO-8601 duration such as PT1H, PT90S, P1D."
-                )
-        if ck == "message":
-            mk = (el.get("catch_message_key") or "").strip()
-            if not mk:
-                errors.append(
-                    f"Intermediate catch '{eid}': message catch requires messageRef or element name."
-                )
-        tgt = out[0]
-        if tgt and str(tgt).strip() in elements:
-            seen: set[str] = set()
-            res = traverse_until_executable(
-                bpmn, str(tgt).strip(), seen, state=None, bindings=None, flow_selector=None
-            )
-            if res is None:
-                errors.append(
-                    f"Intermediate catch '{eid}': path after catch does not reach a single "
-                    "next executable task (ambiguous gateway or dead end)."
-                )
+        _append_intermediate_catch_kind_errors(
+            bpmn=bpmn, elements=elements, eid=eid, el=el, ck=ck, out=out, errors=errors
+        )
     return errors
 
 
@@ -927,6 +1089,30 @@ def _merge_fork_branch_correlation_outcomes(
     )
 
 
+def _parallel_gateway_branch_outcome(
+    *, el: dict[str, Any], el_id: str, fork_id: str
+) -> tuple[str, str | None]:
+    inc = el.get("incoming") or []
+    out = el.get("outgoing") or []
+    if len(inc) >= 2 and len(out) == 1:
+        return ("join", el_id)
+    if len(inc) == 1 and len(out) >= 2:
+        raise ValueError(
+            f"Nested parallel fork at {el_id!r} under fork {fork_id!r} is not supported."
+        )
+    raise ValueError(f"Unsupported parallelGateway {el_id!r} on branch from fork {fork_id!r}.")
+
+
+def _exclusive_gateway_branch_outcome(
+    *, bpmn: dict[str, Any], el_id: str, fork_id: str, visiting_next: set[str]
+) -> tuple[str, str | None]:
+    sub_outcomes = [
+        _fork_branch_correlation_outcome(bpmn, target_id, fork_id, visiting_next)
+        for _flow_id, target_id, _cond in resolve_outgoing_flows(bpmn, el_id)
+    ]
+    return _merge_fork_branch_correlation_outcomes(sub_outcomes, fork_id)
+
+
 def _fork_branch_correlation_outcome(
     bpmn: dict[str, Any],
     el_id: str,
@@ -952,29 +1138,17 @@ def _fork_branch_correlation_outcome(
         return ("end", None)
 
     if typ == "parallelGateway":
-        inc = el.get("incoming") or []
-        out = el.get("outgoing") or []
-        if len(inc) >= 2 and len(out) == 1:
-            return ("join", el_id)
-        if len(inc) == 1 and len(out) >= 2:
-            raise ValueError(
-                f"Nested parallel fork at {el_id!r} under fork {fork_id!r} is not supported."
-            )
-        raise ValueError(f"Unsupported parallelGateway {el_id!r} on branch from fork {fork_id!r}.")
+        return _parallel_gateway_branch_outcome(el=el, el_id=el_id, fork_id=fork_id)
 
     outs = el.get("outgoing") or []
     if len(outs) == 0:
         return ("end", None)
-
     if len(outs) == 1:
         return _fork_branch_correlation_outcome(bpmn, outs[0], fork_id, visiting_next)
-
     if typ == "exclusiveGateway":
-        sub_outcomes: list[tuple[str, str | None]] = []
-        for _fid, tgt, _cond in resolve_outgoing_flows(bpmn, el_id):
-            sub_outcomes.append(_fork_branch_correlation_outcome(bpmn, tgt, fork_id, visiting_next))
-        return _merge_fork_branch_correlation_outcomes(sub_outcomes, fork_id)
-
+        return _exclusive_gateway_branch_outcome(
+            bpmn=bpmn, el_id=el_id, fork_id=fork_id, visiting_next=visiting_next
+        )
     raise ValueError(
         f"Parallel branch from fork {fork_id!r} has multiple outgoing at {el_id!r} "
         f"({typ}); only exclusiveGateway may split before reconverging to one join."
@@ -1155,9 +1329,7 @@ def resolve_position_after_service_task(  # noqa: C901
         if jid:
             return ("join", jid)
         if resolved == "Workflow.END" or not resolved:
-            spc = subprocess_container_after_task_completion_path(
-                bpmn, chosen, {completed_task_id}
-            )
+            spc = subprocess_container_after_task_completion_path(bpmn, chosen, {completed_task_id})
             if spc:
                 return ("subprocess_internal_end", spc)
             return ("end", None)
@@ -1169,9 +1341,7 @@ def resolve_position_after_service_task(  # noqa: C901
         task_pairs = [(bid, tid) for bid, tid, _j in entries if tid is not None]
         return ("fork", (target_id, task_pairs))
 
-    sp_exit = _subprocess_id_when_task_exits_via_internal_end(
-        bpmn, completed_task_id, target_id
-    )
+    sp_exit = _subprocess_id_when_task_exits_via_internal_end(bpmn, completed_task_id, target_id)
     if sp_exit:
         return ("subprocess_internal_end", sp_exit)
 
@@ -1393,11 +1563,7 @@ def _reachable_from_start(bpmn: dict[str, Any]) -> set[str]:
 def _reachable_inside_subprocess(bpmn: dict[str, Any], sp_id: str) -> set[str]:
     """Nodes inside embedded subprocess sp_id reachable from its single internal start."""
     elements = bpmn.get("elements") or {}
-    inside = {
-        eid
-        for eid, el in elements.items()
-        if el.get("subprocess_container") == sp_id
-    }
+    inside = {eid for eid, el in elements.items() if el.get("subprocess_container") == sp_id}
     starts = [eid for eid in inside if (elements.get(eid) or {}).get("type") == "startEvent"]
     if not starts:
         return set()
@@ -1443,6 +1609,70 @@ def _reachable_from_boundary_targets(bpmn: dict[str, Any]) -> set[str]:
     return seen
 
 
+def _append_process_scope_graph_errors(
+    *,
+    elements: dict[str, Any],
+    parent_starts: list[str],
+    ends: list[str],
+    reachable: set[str],
+    dead_end_types: tuple[str, ...],
+    errors: list[str],
+) -> None:
+    if len(parent_starts) != 1:
+        errors.append(
+            f"Expected exactly one startEvent in process scope, found {len(parent_starts)}. "
+            "Suggestion: ensure a single well-formed start (internal subprocess starts do not count)."
+        )
+    if not ends:
+        errors.append("No endEvent found. Suggestion: add an end event to close the process.")
+    for eid, el in elements.items():
+        if el.get("subprocess_container"):
+            continue
+        t = el.get("type")
+        if t in ("serviceTask", "userTask") and eid not in reachable:
+            errors.append(
+                f"Unreachable node '{eid}' ({t}). Suggestion: connect it from the start event via sequence flows."
+            )
+        if t in dead_end_types and not (el.get("outgoing") or []):
+            errors.append(
+                f"Dead-end '{eid}' ({t}): no outgoing flow. Suggestion: connect to the next task or end event."
+            )
+    for eid in ends:
+        if (elements.get(eid) or {}).get("subprocess_container"):
+            continue
+        if eid not in reachable and parent_starts:
+            errors.append(
+                f"endEvent '{eid}' is not reachable from start. Suggestion: add sequence flows so all ends are reachable."
+            )
+
+
+def _append_subprocess_graph_errors(
+    *,
+    bpmn: dict[str, Any],
+    elements: dict[str, Any],
+    dead_end_types: tuple[str, ...],
+    errors: list[str],
+) -> None:
+    for sp_id in bpmn.get("subprocess_root_ids") or []:
+        if (elements.get(sp_id) or {}).get("type") != "subProcess":
+            continue
+        reachable_inside = _reachable_inside_subprocess(bpmn, sp_id)
+        for eid, el in elements.items():
+            if el.get("subprocess_container") != sp_id:
+                continue
+            et = el.get("type")
+            if et in ("serviceTask", "userTask") and eid not in reachable_inside:
+                errors.append(
+                    f"Subprocess '{sp_id}': internal node '{eid}' is not reachable from the internal start event."
+                )
+            if et == "endEvent" and eid not in reachable_inside:
+                errors.append(
+                    f"Subprocess '{sp_id}': internal endEvent '{eid}' is not reachable from the internal start."
+                )
+            if et in dead_end_types and not (el.get("outgoing") or []):
+                errors.append(f"Subprocess '{sp_id}': dead-end '{eid}' ({et}): no outgoing flow.")
+
+
 def validate_bpmn_graph_structure(bpmn: dict[str, Any]) -> list[str]:
     """
     Validate start/end, reachability of service/user tasks, and dead-end executable nodes.
@@ -1458,72 +1688,19 @@ def validate_bpmn_graph_structure(bpmn: dict[str, Any]) -> list[str]:
         if el.get("type") == "startEvent" and not el.get("subprocess_container")
     ]
     ends = [eid for eid, el in elements.items() if el.get("type") == "endEvent"]
-    if len(parent_starts) != 1:
-        errors.append(
-            f"Expected exactly one startEvent in process scope, found {len(parent_starts)}. "
-            "Suggestion: ensure a single well-formed start (internal subprocess starts do not count)."
-        )
-    if not ends:
-        errors.append("No endEvent found. Suggestion: add an end event to close the process.")
     reachable = _reachable_from_start(bpmn) | _reachable_from_boundary_targets(bpmn)
-    for eid, el in elements.items():
-        if el.get("subprocess_container"):
-            continue
-        t = el.get("type")
-        if t in ("serviceTask", "userTask") and eid not in reachable:
-            errors.append(
-                f"Unreachable node '{eid}' ({t}). Suggestion: connect it from the start event via sequence flows."
-            )
     dead_end_types = ("serviceTask", "userTask", "exclusiveGateway", "parallelGateway")
-    for eid, el in elements.items():
-        if el.get("subprocess_container"):
-            continue
-        t = el.get("type")
-        if t in dead_end_types and not (el.get("outgoing") or []):
-            errors.append(
-                f"Dead-end '{eid}' ({t}): no outgoing flow. Suggestion: connect to the next task or end event."
-            )
-    for eid in ends:
-        el = elements.get(eid) or {}
-        if el.get("subprocess_container"):
-            continue
-        if eid not in reachable and parent_starts:
-            errors.append(
-                f"endEvent '{eid}' is not reachable from start. Suggestion: add sequence flows so all ends are reachable."
-            )
-    for sp_id in bpmn.get("subprocess_root_ids") or []:
-        if (elements.get(sp_id) or {}).get("type") != "subProcess":
-            continue
-        r_in = _reachable_inside_subprocess(bpmn, sp_id)
-        inside_tasks = [
-            eid
-            for eid, el in elements.items()
-            if el.get("subprocess_container") == sp_id
-            and el.get("type") in ("serviceTask", "userTask")
-        ]
-        for eid in inside_tasks:
-            if eid not in r_in:
-                errors.append(
-                    f"Subprocess '{sp_id}': internal node '{eid}' is not reachable from the "
-                    "internal start event."
-                )
-        for eid, el in elements.items():
-            if el.get("subprocess_container") != sp_id:
-                continue
-            if el.get("type") != "endEvent":
-                continue
-            if eid not in r_in:
-                errors.append(
-                    f"Subprocess '{sp_id}': internal endEvent '{eid}' is not reachable from the internal start."
-                )
-        for eid, el in elements.items():
-            if el.get("subprocess_container") != sp_id:
-                continue
-            t = el.get("type")
-            if t in dead_end_types and not (el.get("outgoing") or []):
-                errors.append(
-                    f"Subprocess '{sp_id}': dead-end '{eid}' ({t}): no outgoing flow."
-                )
+    _append_process_scope_graph_errors(
+        elements=elements,
+        parent_starts=parent_starts,
+        ends=ends,
+        reachable=reachable,
+        dead_end_types=dead_end_types,
+        errors=errors,
+    )
+    _append_subprocess_graph_errors(
+        bpmn=bpmn, elements=elements, dead_end_types=dead_end_types, errors=errors
+    )
     return errors
 
 
@@ -1588,11 +1765,7 @@ def validate_service_task_bindings_strict(
     return errors
 
 
-def validate_bpmn_boundary_events(bpmn: dict[str, Any]) -> list[str]:
-    """PAR-014: interrupting timer/error boundary events only; single outgoing."""
-    errors: list[str] = []
-    elements = bpmn.get("elements") or {}
-
+def _append_boundary_summary_errors(bpmn: dict[str, Any], errors: list[str]) -> None:
     for raw in bpmn.get("boundary_unsupported") or []:
         if not isinstance(raw, dict):
             continue
@@ -1601,7 +1774,6 @@ def validate_bpmn_boundary_events(bpmn: dict[str, Any]) -> list[str]:
             f"Boundary '{bid}': unsupported event type (only timer and error boundaries are allowed in v1). "
             "Suggestion: remove or replace with boundaryTimerEvent or boundaryErrorEvent."
         )
-
     for pair in bpmn.get("boundary_duplicate_timers") or []:
         errors.append(
             f"Task '{pair[0]}': multiple timer boundaries are not allowed (second: '{pair[1]}'). "
@@ -1613,6 +1785,100 @@ def validate_bpmn_boundary_events(bpmn: dict[str, Any]) -> list[str]:
             "Suggestion: use at most one interrupting error boundary per task."
         )
 
+
+def _append_boundary_attachment_errors(
+    *, elements: dict[str, Any], task_id: str, bid: str, errors: list[str]
+) -> None:
+    if task_id not in elements:
+        errors.append(
+            f"Boundary '{bid}': attachedToRef '{task_id}' is not a known flow node. "
+            "Suggestion: attach to a serviceTask, userTask, task, or scriptTask."
+        )
+        return
+    et = (elements.get(task_id) or {}).get("type") or ""
+    if et not in _BOUNDARY_ATTACHABLE_TYPES:
+        errors.append(
+            f"Boundary '{bid}': attached task '{task_id}' has type '{et}' — "
+            "only serviceTask, userTask, task, and scriptTask may have boundaries in v1."
+        )
+
+
+def _append_boundary_target_errors(
+    *,
+    bpmn: dict[str, Any],
+    elements: dict[str, Any],
+    bid: str,
+    spec: dict[str, Any],
+    errors: list[str],
+) -> str:
+    nout = spec.get("outgoing_count")
+    if nout != 1:
+        errors.append(
+            f"Boundary '{bid}': must have exactly one outgoing sequence flow (found {nout}). "
+            "Suggestion: connect the boundary to a single alternate path."
+        )
+    tgt = (spec.get("target_element_id") or "").strip()
+    if not tgt:
+        errors.append(
+            f"Boundary '{bid}': no outgoing target. Suggestion: connect one sequence flow."
+        )
+        return ""
+    if tgt not in elements:
+        errors.append(f"Boundary '{bid}': outgoing target '{tgt}' is missing from the diagram.")
+        return ""
+    seen: set[str] = set()
+    res = traverse_until_executable(bpmn, tgt, seen, state=None, bindings=None, flow_selector=None)
+    if res is None:
+        errors.append(
+            f"Boundary '{bid}': alternate path from '{tgt}' does not reach a single "
+            "next executable task (ambiguous gateway or dead end). Suggestion: connect "
+            "to a clear path to the next task or endEvent."
+        )
+    return tgt
+
+
+def _append_boundary_timer_errors(*, bid: str, spec: dict[str, Any], errors: list[str]) -> None:
+    dur = spec.get("duration_iso") or ""
+    if not dur.strip():
+        errors.append(
+            f"Boundary '{bid}': timer boundary requires bpmn:timeDuration (e.g. PT5M). "
+            "Suggestion: add a timeDuration inside timerEventDefinition."
+        )
+        return
+    if iso8601_duration_to_seconds(dur) is None:
+        errors.append(
+            f"Boundary '{bid}': could not parse timeDuration {dur!r}. "
+            "Suggestion: use ISO-8601 duration such as PT1H, PT90S, P1D."
+        )
+
+
+def _append_one_boundary_spec_errors(
+    *,
+    bpmn: dict[str, Any],
+    elements: dict[str, Any],
+    task_id: str,
+    kind: str,
+    spec: dict[str, Any],
+    errors: list[str],
+) -> None:
+    bid = spec.get("boundary_id", "?")
+    if not spec.get("interrupting", True):
+        errors.append(
+            f"Boundary '{bid}': non-interrupting boundaries are not supported in v1 "
+            "(cancelActivity must be true or omitted). Suggestion: use interrupting boundary only."
+        )
+    _append_boundary_attachment_errors(elements=elements, task_id=task_id, bid=bid, errors=errors)
+    _append_boundary_target_errors(bpmn=bpmn, elements=elements, bid=bid, spec=spec, errors=errors)
+    if kind == "timer":
+        _append_boundary_timer_errors(bid=bid, spec=spec, errors=errors)
+
+
+def validate_bpmn_boundary_events(bpmn: dict[str, Any]) -> list[str]:
+    """PAR-014: interrupting timer/error boundary events only; single outgoing."""
+    errors: list[str] = []
+    elements = bpmn.get("elements") or {}
+    _append_boundary_summary_errors(bpmn, errors)
+
     for task_id, bucket in (bpmn.get("boundary_by_task") or {}).items():
         if not isinstance(bucket, dict):
             continue
@@ -1620,62 +1886,9 @@ def validate_bpmn_boundary_events(bpmn: dict[str, Any]) -> list[str]:
             spec = bucket.get(kind)
             if not isinstance(spec, dict):
                 continue
-            bid = spec.get("boundary_id", "?")
-            if not spec.get("interrupting", True):
-                errors.append(
-                    f"Boundary '{bid}': non-interrupting boundaries are not supported in v1 "
-                    "(cancelActivity must be true or omitted). Suggestion: use interrupting boundary only."
-                )
-            el = elements.get(task_id) or {}
-            et = el.get("type") or ""
-            if task_id not in elements:
-                errors.append(
-                    f"Boundary '{bid}': attachedToRef '{task_id}' is not a known flow node. "
-                    "Suggestion: attach to a serviceTask, userTask, task, or scriptTask."
-                )
-            elif et not in _BOUNDARY_ATTACHABLE_TYPES:
-                errors.append(
-                    f"Boundary '{bid}': attached task '{task_id}' has type '{et}' — "
-                    "only serviceTask, userTask, task, and scriptTask may have boundaries in v1."
-                )
-            nout = spec.get("outgoing_count")
-            if nout != 1:
-                errors.append(
-                    f"Boundary '{bid}': must have exactly one outgoing sequence flow (found {nout}). "
-                    "Suggestion: connect the boundary to a single alternate path."
-                )
-            tgt = (spec.get("target_element_id") or "").strip()
-            if not tgt:
-                errors.append(
-                    f"Boundary '{bid}': no outgoing target. Suggestion: connect one sequence flow."
-                )
-            elif tgt not in elements:
-                errors.append(
-                    f"Boundary '{bid}': outgoing target '{tgt}' is missing from the diagram."
-                )
-            if kind == "timer":
-                dur = spec.get("duration_iso") or ""
-                if not dur.strip():
-                    errors.append(
-                        f"Boundary '{bid}': timer boundary requires bpmn:timeDuration (e.g. PT5M). "
-                        "Suggestion: add a timeDuration inside timerEventDefinition."
-                    )
-                elif iso8601_duration_to_seconds(dur) is None:
-                    errors.append(
-                        f"Boundary '{bid}': could not parse timeDuration {dur!r}. "
-                        "Suggestion: use ISO-8601 duration such as PT1H, PT90S, P1D."
-                    )
-            if tgt and tgt in elements:
-                seen: set[str] = set()
-                res = traverse_until_executable(
-                    bpmn, tgt, seen, state=None, bindings=None, flow_selector=None
-                )
-                if res is None:
-                    errors.append(
-                        f"Boundary '{bid}': alternate path from '{tgt}' does not reach a single "
-                        "next executable task (ambiguous gateway or dead end). Suggestion: connect "
-                        "to a clear path to the next task or endEvent."
-                    )
+            _append_one_boundary_spec_errors(
+                bpmn=bpmn, elements=elements, task_id=task_id, kind=kind, spec=spec, errors=errors
+            )
     return errors
 
 
@@ -1704,19 +1917,16 @@ def validate_exclusive_gateway_semantics(bpmn: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     elements = bpmn.get("elements") or {}
     flows = bpmn.get("sequence_flows") or {}
-    for eid, el in elements.items():
-        if el.get("type") != "exclusiveGateway":
-            continue
+
+    def _append_exclusive_gateway_errors(eid: str, el: dict[str, Any]) -> None:
         outgoing_flow_ids = el.get("outgoing_flow_ids") or []
         outgoing = el.get("outgoing") or []
         if len(outgoing) <= 1:
-            continue
-        has_condition = False
-        for flow_id in outgoing_flow_ids:
-            cond = (flows.get(flow_id) or {}).get("condition", "") or ""
-            if cond and cond.strip():
-                has_condition = True
-                break
+            return
+        has_condition = any(
+            ((flows.get(flow_id) or {}).get("condition", "") or "").strip()
+            for flow_id in outgoing_flow_ids
+        )
         default_flow_id = el.get("default_flow_id")
         if not has_condition and not default_flow_id:
             errors.append(
@@ -1729,16 +1939,18 @@ def validate_exclusive_gateway_semantics(bpmn: dict[str, Any]) -> list[str]:
                 f"Outgoing: {outgoing_flow_ids}. Suggestion: set default to one of the listed flow ids."
             )
         for flow_id in outgoing_flow_ids:
-            cond = (flows.get(flow_id) or {}).get("condition", "") or ""
-            if not cond.strip():
-                continue
-            text = cond.strip()
-            if not is_supported_condition_syntax(text):
+            text = ((flows.get(flow_id) or {}).get("condition", "") or "").strip()
+            if text and not is_supported_condition_syntax(text):
                 errors.append(
                     f"Gateway '{eid}' flow '{flow_id}': unparsable condition. "
                     f"Condition: {text!r}. "
                     "Suggestion: use state.<attr> op value or state.<attr> in [...], with <attr> a single identifier (no dots)."
                 )
+
+    for eid, el in elements.items():
+        if el.get("type") != "exclusiveGateway":
+            continue
+        _append_exclusive_gateway_errors(eid, el)
     return errors
 
 

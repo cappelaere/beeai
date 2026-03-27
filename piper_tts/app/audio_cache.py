@@ -7,7 +7,7 @@ from typing import Dict, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 
-from app.config import config
+from .config import config
 
 logger = logging.getLogger(__name__)
 

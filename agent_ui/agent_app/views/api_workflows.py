@@ -6,7 +6,6 @@ Refactored from monolithic views.py - complexity reduced.
 
 import json
 import logging
-import re
 from pathlib import Path
 
 from django.http import JsonResponse

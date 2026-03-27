@@ -7,16 +7,18 @@ logger = logging.getLogger(__name__)
 _SKIP_STARTUP_COMMANDS = frozenset({"check", "migrate", "makemigrations", "shell", "test"})
 
 
-def run_startup_checks() -> None:
-    """
-    Run environment and registry checks on startup. Log one consolidated
-    summary of failures and warnings. Non-fatal for optional deps; required
-    paths (agents.yaml, workflows dir) are logged as errors but do not block startup.
-    """
-    failed: list[str] = []
-    warnings: list[str] = []
+def _enable_sqlite_wal(sender, connection, **kwargs):
+    """Reduce writer/reader contention for dev (ASGI + background sync)."""
+    if connection.vendor != "sqlite":
+        return
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA journal_mode=WAL;")
+    except Exception as e:
+        logger.debug("SQLite WAL pragma failed: %s", e)
 
-    # Critical paths
+
+def _check_agent_registry_path(failed: list[str]) -> None:
     try:
         from agents.registry import get_registry_path
 
@@ -26,6 +28,8 @@ def run_startup_checks() -> None:
     except Exception as e:
         failed.append(f"Agent registry path check failed: {e}")
 
+
+def _check_workflows_path(failed: list[str]) -> None:
     try:
         from agent_app.workflow_registry import REPO_ROOT
 
@@ -35,14 +39,17 @@ def run_startup_checks() -> None:
     except Exception as e:
         failed.append(f"Workflows path check failed: {e}")
 
-    # Optional: Langfuse env when observability enabled
-    if os.getenv("LANGFUSE_ENABLED", "false").lower() in ("true", "1", "yes"):
-        if not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"):
-            warnings.append(
-                "LANGFUSE_ENABLED is set but LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY is missing"
-            )
 
-    # Optional: piper_tts (lazy import is fine; we only check module loads)
+def _check_langfuse_env(warnings: list[str]) -> None:
+    langfuse_enabled = os.getenv("LANGFUSE_ENABLED", "false").lower() in ("true", "1", "yes")
+    has_langfuse_keys = os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")
+    if langfuse_enabled and not has_langfuse_keys:
+        warnings.append(
+            "LANGFUSE_ENABLED is set but LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY is missing"
+        )
+
+
+def _check_optional_piper_tts(warnings: list[str]) -> None:
     try:
         import sys
         from pathlib import Path
@@ -57,7 +64,8 @@ def run_startup_checks() -> None:
     except Exception as e:
         warnings.append(f"Optional: piper_tts check failed: {e}")
 
-    # YAML/metadata schema validation
+
+def _run_schema_validation(failed: list[str], warnings: list[str]) -> None:
     try:
         from agent_app.schema_validation import validate_all_metadata
 
@@ -66,6 +74,22 @@ def run_startup_checks() -> None:
         warnings.extend(schema_warnings)
     except Exception as e:
         failed.append(f"Schema validation failed: {e}")
+
+
+def run_startup_checks() -> None:
+    """
+    Run environment and registry checks on startup. Log one consolidated
+    summary of failures and warnings. Non-fatal for optional deps; required
+    paths (agents.yaml, workflows dir) are logged as errors but do not block startup.
+    """
+    failed: list[str] = []
+    warnings: list[str] = []
+
+    _check_agent_registry_path(failed)
+    _check_workflows_path(failed)
+    _check_langfuse_env(warnings)
+    _check_optional_piper_tts(warnings)
+    _run_schema_validation(failed, warnings)
 
     # Log consolidated summary
     if failed:
@@ -161,6 +185,10 @@ class AgentAppConfig(AppConfig):
         Clear cache on startup to ensure fresh agent responses with latest tools.
         """
         import sys
+
+        from django.db.backends.signals import connection_created
+
+        connection_created.connect(_enable_sqlite_wal, dispatch_uid="agent_app.enable_sqlite_wal")
 
         # Skip during Django checks and migrations
         if any(arg in _SKIP_STARTUP_COMMANDS for arg in sys.argv):

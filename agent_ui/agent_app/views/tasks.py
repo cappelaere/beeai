@@ -92,14 +92,16 @@ def task_detail(request, task_id):
 
         # Check if user can access this task
 
-        if not task.can_be_claimed_by(user_id, user_role) and task.assigned_to_user_id != user_id:
-            # Allow viewing if it's their assigned task
-
-            if (
+        if (
+            not task.can_be_claimed_by(user_id, user_role)
+            and task.assigned_to_user_id != user_id
+            and (
                 task.status not in [HumanTask.STATUS_OPEN, HumanTask.STATUS_IN_PROGRESS]
                 or task.assigned_to_user_id != user_id
-            ):
-                return HttpResponseForbidden("You don't have permission to view this task")
+            )
+        ):
+            # Allow viewing if it's their assigned task
+            return HttpResponseForbidden("You don't have permission to view this task")
 
         # Serialize input_data as JSON for JavaScript
 
@@ -121,7 +123,9 @@ def task_detail(request, task_id):
             wf = workflow_registry.get(wr.workflow_id)
             meta = wf.get("metadata") if wf else None
             has_xml = bool(
-                meta and getattr(meta, "diagram_bpmn_xml", None) and str(meta.diagram_bpmn_xml).strip()
+                meta
+                and getattr(meta, "diagram_bpmn_xml", None)
+                and str(meta.diagram_bpmn_xml).strip()
             )
             pd = wr.progress_data if isinstance(wr.progress_data, dict) else None
             if is_bpmn_operator_view(diagram_bpmn_xml=has_xml, progress_data=pd):

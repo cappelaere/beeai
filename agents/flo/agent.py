@@ -18,6 +18,17 @@ if str(_AGENTS_DIR) not in sys.path:
 
 from beeai_framework.tools.search.duckduckgo import DuckDuckGoSearchTool
 from beeai_framework.tools.think import ThinkTool
+from notification_preferences_tools import (
+    get_notification_preferences,
+    set_notification_preferences,
+)
+from schedule_tools import (
+    create_schedule,
+    delete_schedule,
+    list_schedules,
+    set_schedule_active,
+    update_schedule,
+)
 
 # Import all workflow and task tools
 from workflow_tools import (
@@ -38,17 +49,6 @@ from workflow_tools import (
     search_workflow_runs,
     submit_task,
     suggest_workflow,
-)
-from schedule_tools import (
-    create_schedule,
-    delete_schedule,
-    list_schedules,
-    set_schedule_active,
-    update_schedule,
-)
-from notification_preferences_tools import (
-    get_notification_preferences,
-    set_notification_preferences,
 )
 
 from agents.base import AgentConfig

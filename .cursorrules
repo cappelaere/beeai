@@ -1,0 +1,85 @@
+You are coding in this repository under strict implementation rules.
+
+Core code writing rules
+
+1. Keep control flow linear.
+- Prefer straightforward top-to-bottom logic.
+- Avoid deep nesting and convoluted branching.
+- Flatten conditionals where possible.
+- Do not introduce more than 2 levels of nesting unless clearly justified.
+
+2. Bound every loop.
+- Every loop, retry, poll, crawl, and recursion must have an explicit maximum bound.
+- Do not write unbounded retry logic or indefinite polling.
+- Define the timeout, backoff, and failure behavior when the limit is reached.
+
+3. Manage resources explicitly.
+- Every file, socket, DB connection, transaction, lock, stream, cursor, and handle must be closed or released on every path, including errors.
+- Use context managers, try/finally, or equivalent cleanup patterns.
+- Never leave resource ownership ambiguous.
+
+4. One function, one job.
+- Each function should do one thing only.
+- Keep functions small, readable, and explainable in one sentence.
+- Target roughly 40–60 lines maximum per function.
+- Split large functions before adding more logic.
+
+5. Make assumptions explicit.
+- Validate preconditions, invariants, and important postconditions.
+- Use assertions for internal invariants and explicit checks for runtime input.
+- Fail loudly when assumptions are violated.
+
+6. Never swallow errors.
+- No empty catch/except blocks.
+- Every error must be logged, raised, or returned explicitly.
+- Check return values from operations that can fail.
+- Silent failure is not allowed.
+
+7. Keep state narrow.
+- Prefer local variables over shared mutable state.
+- Avoid module-level globals and unnecessary class state.
+- Pass dependencies explicitly.
+- Make data flow visible at call sites.
+
+8. Make side effects obvious.
+- Separate pure computation from I/O, mutations, DB writes, cache writes, and network calls.
+- Side-effectful functions must be clearly named.
+- Do not hide writes or API calls inside innocent-looking helpers.
+
+9. Limit indirection.
+- Avoid unnecessary abstraction layers, dynamic dispatch chains, reflection, magic, and over-engineering.
+- Prefer direct, readable composition over cleverness.
+- Keep call paths easy to trace during debugging.
+
+10. Treat warnings as errors.
+- Code must pass linting, type checking, and static analysis with zero warnings.
+- Do not ignore tool output.
+- Fix warnings before considering the task complete.
+
+Implementation behavior required from Cursor
+
+- Optimize for readability, correctness, maintainability, and debuggability over cleverness.
+- Make the smallest safe change that satisfies the requirement.
+- Preserve existing architecture unless there is a clear defect or the task requires a redesign.
+- Do not introduce new dependencies unless they are necessary and justified.
+- Do not add abstraction “for future use” without a concrete present need.
+- Prefer explicit names over short or clever names.
+- Add concise comments only where intent is not obvious from the code itself.
+- Keep tests focused, deterministic, and easy to read.
+- When modifying existing code, align with the repository’s conventions unless doing so would violate these rules.
+
+For every code task, Cursor should self-check before finalizing:
+
+- Is the control flow simple and traceable?
+- Are all loops, retries, and waits bounded?
+- Are resources cleaned up on success and failure paths?
+- Are functions single-purpose and reasonably small?
+- Are assumptions validated explicitly?
+- Are failures surfaced instead of hidden?
+- Is shared mutable state minimized?
+- Are side effects explicit and easy to identify?
+- Is abstraction justified and minimal?
+- Does the code pass linting and type checks without warnings?
+
+If a requested implementation would violate these rules, do not proceed with a brittle solution.
+Instead, propose a safer, simpler structure and implement that version when possible.

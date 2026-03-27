@@ -11,17 +11,17 @@ from django.test import TestCase
 from agent_app.bpmn_engine import (
     BpmnEngineError,
     can_run_with_bpmn_engine,
+    create_initial_state_from_inputs,  # noqa: F401
     current_node_ids_for_progress,
     evaluate_condition,
     get_next_step_for_resume,
     normalize_engine_state,
     run_bpmn_workflow,
 )
-from agent_app.bpmn_engine import create_initial_state_from_inputs  # noqa: F401
 from agent_app.task_service import (
     BpmnModeledBoundaryError,
     BpmnRetryableTaskError,
-    TaskPendingException,
+    TaskPendingError,
 )
 from agent_app.tests.bpmn_conformance.fixtures.registry import (
     _BIND_EXCLUSIVE,
@@ -50,6 +50,27 @@ def _nb(raw: dict) -> dict:
         workflow_id=raw.get("workflow_id", "t"),
         executor=raw.get("executor", "x.Executor"),
     )
+
+
+class _ParallelJoinResumeExecutor:
+    def __init__(self, b_calls: list[int], *, pause_on_first_b: bool = False):
+        self._b_calls = b_calls
+        self._pause_on_first_b = pause_on_first_b
+
+    async def task0(self, s):
+        return None
+
+    async def task_a(self, s):
+        return None
+
+    async def task_b(self, s):
+        self._b_calls[0] += 1
+        if self._pause_on_first_b and self._b_calls[0] == 1:
+            raise TaskPendingError("h", "human", s, "taskB")
+        return
+
+    async def task_after(self, s):
+        return None
 
 
 class FirstTaskDetectionTests(TestCase):
@@ -149,7 +170,7 @@ class PauseResumeTests(TestCase):
 
         class Ex:
             async def h1(self, state):
-                raise TaskPendingException("tid", "t", state, "t2")
+                raise TaskPendingError("tid", "t", state, "t2")
 
             async def h2(self, state):
                 return None
@@ -159,7 +180,7 @@ class PauseResumeTests(TestCase):
         async def run():
             await run_bpmn_workflow(Ex(), st, bpmn, bindings)
 
-        with self.assertRaises(TaskPendingException):
+        with self.assertRaises(TaskPendingError):
             asyncio.run(run())
         self.assertEqual(get_next_step_for_resume(st), "t2")
 
@@ -171,18 +192,16 @@ class PauseResumeTests(TestCase):
         class Ex:
             async def h1(self, state):
                 calls.append("h1")
-                return None
+                return
 
             async def h2(self, state):
                 calls.append("h2")
-                return None
+                return
 
         st = _state()
 
         async def run():
-            await run_bpmn_workflow(
-                Ex(), st, bpmn, bindings, start_from_task_id="t2"
-            )
+            await run_bpmn_workflow(Ex(), st, bpmn, bindings, start_from_task_id="t2")
 
         asyncio.run(run())
         self.assertEqual(calls, ["h2"])
@@ -201,9 +220,7 @@ class CurrentNodeIdsForProgressTests(TestCase):
         self.assertEqual(current_node_ids_for_progress(eng), ["a", "b"])
 
     def test_fallback_when_empty_tokens(self):
-        eng = normalize_engine_state(
-            {"current_node_ids": ["x"], "active_tokens": []}
-        )
+        eng = normalize_engine_state({"current_node_ids": ["x"], "active_tokens": []})
         self.assertEqual(current_node_ids_for_progress(eng), ["x"])
 
     def test_none_state(self):
@@ -272,7 +289,7 @@ class EngineStateTests(TestCase):
 
         class Ex:
             async def h1(self, state):
-                raise TaskPendingException("x", "human", state, "t1")
+                raise TaskPendingError("x", "human", state, "t1")
 
             async def h2(self, state):
                 return None
@@ -282,7 +299,7 @@ class EngineStateTests(TestCase):
         async def run1():
             await run_bpmn_workflow(Ex(), st, bpmn, bindings)
 
-        with self.assertRaises(TaskPendingException):
+        with self.assertRaises(TaskPendingError):
             asyncio.run(run1())
         eng1 = normalize_engine_state(dict(getattr(st, "_bpmn_engine_state", {})))
         self.assertIn("t1", eng1.get("completed_node_ids", []))
@@ -297,9 +314,7 @@ class EngineStateTests(TestCase):
         st.__dict__["_bpmn_engine_state"] = eng1
 
         async def run2():
-            await run_bpmn_workflow(
-                Ex2(), st, bpmn, bindings, start_from_task_id="t1"
-            )
+            await run_bpmn_workflow(Ex2(), st, bpmn, bindings, start_from_task_id="t1")
 
         asyncio.run(run2())
         # Paused before t1 was appended to workflow_steps; resume continues from t1 so only
@@ -568,7 +583,7 @@ class ParallelForkExecutionTests(TestCase):
                 return None
 
             async def task_b(self, s):
-                raise TaskPendingException("h", "human", s, "taskB")
+                raise TaskPendingError("h", "human", s, "taskB")
 
             async def task_after(self, s):
                 return None
@@ -578,7 +593,7 @@ class ParallelForkExecutionTests(TestCase):
         async def run():
             await run_bpmn_workflow(Ex(), st, bpmn, bindings)
 
-        with self.assertRaises(TaskPendingException):
+        with self.assertRaises(TaskPendingError):
             asyncio.run(run())
         eng = normalize_engine_state(dict(getattr(st, "_bpmn_engine_state", {})))
         ids = {t.get("current_element_id") for t in eng.get("active_tokens") or []}
@@ -630,9 +645,7 @@ class ParallelForkExecutionTests(TestCase):
             return "cancelled" if n[0] >= 2 else None
 
         async def run():
-            await run_bpmn_workflow(
-                Ex(), _state(), bpmn, bindings, execution_check=chk
-            )
+            await run_bpmn_workflow(Ex(), _state(), bpmn, bindings, execution_check=chk)
 
         with self.assertRaises(BpmnEngineError) as e:
             asyncio.run(run())
@@ -663,9 +676,7 @@ class ParallelForkExecutionTests(TestCase):
         st = _state()
 
         async def run():
-            await run_bpmn_workflow(
-                Ex(), st, bpmn, bindings, execution_check=chk
-            )
+            await run_bpmn_workflow(Ex(), st, bpmn, bindings, execution_check=chk)
 
         with self.assertRaises(BpmnEngineError):
             asyncio.run(run())
@@ -697,9 +708,7 @@ class ParallelForkExecutionTests(TestCase):
         st = _state()
 
         async def run():
-            await run_bpmn_workflow(
-                Ex(), st, bpmn, bindings, execution_check=chk
-            )
+            await run_bpmn_workflow(Ex(), st, bpmn, bindings, execution_check=chk)
 
         with self.assertRaises(BpmnEngineError) as e:
             asyncio.run(run())
@@ -839,8 +848,7 @@ class ParallelJoinExecutionTests(TestCase):
                 "end": {"type": "endEvent", "outgoing": []},
             },
             "sequence_flows": {
-                k: {}
-                for k in ["s0", "t0", "ffa", "ffb", "fa1", "fa2", "fb1", "jc", "jd"]
+                k: {} for k in ["s0", "t0", "ffa", "ffb", "fa1", "fa2", "fb1", "jc", "jd"]
             },
             "ordered_element_ids": [
                 "start",
@@ -929,7 +937,7 @@ class ParallelJoinExecutionTests(TestCase):
                 return None
 
             async def task_a(self, s):
-                raise TaskPendingException("h", "human", s, "taskA")
+                raise TaskPendingError("h", "human", s, "taskA")
 
             async def task_b(self, s):
                 return None
@@ -942,7 +950,7 @@ class ParallelJoinExecutionTests(TestCase):
         async def run():
             await run_bpmn_workflow(Ex(), st, bpmn, bindings)
 
-        with self.assertRaises(TaskPendingException):
+        with self.assertRaises(TaskPendingError):
             asyncio.run(run())
         eng = getattr(st, "_bpmn_engine_state", {})
         cur = current_node_ids_for_progress(eng)
@@ -952,50 +960,21 @@ class ParallelJoinExecutionTests(TestCase):
         bpmn = _bpmn_fork_join_downstream()
         bindings = _nb(_BIND_FJ)
         b_calls = [0]
-
-        class ExPause:
-            async def task0(self, s):
-                return None
-
-            async def task_a(self, s):
-                return None
-
-            async def task_b(self, s):
-                b_calls[0] += 1
-                if b_calls[0] == 1:
-                    raise TaskPendingException("h", "human", s, "taskB")
-                return None
-
-            async def task_after(self, s):
-                return None
-
         st = _state()
 
         async def run1():
-            await run_bpmn_workflow(ExPause(), st, bpmn, bindings)
+            await run_bpmn_workflow(
+                _ParallelJoinResumeExecutor(b_calls, pause_on_first_b=True), st, bpmn, bindings
+            )
 
-        with self.assertRaises(TaskPendingException):
+        with self.assertRaises(TaskPendingError):
             asyncio.run(run1())
         eng = normalize_engine_state(dict(getattr(st, "_bpmn_engine_state", {})))
         st.__dict__["_bpmn_engine_state"] = eng
 
-        class ExDone:
-            async def task0(self, s):
-                return None
-
-            async def task_a(self, s):
-                return None
-
-            async def task_b(self, s):
-                b_calls[0] += 1
-                return None
-
-            async def task_after(self, s):
-                return None
-
         async def run2():
             await run_bpmn_workflow(
-                ExDone(), st, bpmn, bindings, start_from_task_id="taskB"
+                _ParallelJoinResumeExecutor(b_calls), st, bpmn, bindings, start_from_task_id="taskB"
             )
 
         asyncio.run(run2())
@@ -1051,11 +1030,11 @@ class BoundaryTimerAndErrorTests(TestCase):
         class Ex:
             async def main(self, s):
                 calls.append("main")
-                return None
+                return
 
             async def rec(self, s):
                 calls.append("rec")
-                return None
+                return
 
         tmono = [0.0]
 
@@ -1064,9 +1043,7 @@ class BoundaryTimerAndErrorTests(TestCase):
             return tmono[0]
 
         with patch("agent_app.bpmn_engine.time.monotonic", side_effect=_m):
-            asyncio.run(
-                run_bpmn_workflow(Ex(), _state(), bpmn, bindings)
-            )
+            asyncio.run(run_bpmn_workflow(Ex(), _state(), bpmn, bindings))
         self.assertEqual(calls, ["rec", "main"])
 
     def test_error_boundary_routes_on_modeled_error(self):
@@ -1200,7 +1177,7 @@ class BoundaryTimerAndErrorTests(TestCase):
         class Ex:
             async def main(self, s):
                 main_calls[0] += 1
-                return None
+                return
 
             async def rec(self, s):
                 return None
@@ -1269,9 +1246,7 @@ class BoundaryTimerAndErrorTests(TestCase):
         st = _state()
 
         async def run():
-            await run_bpmn_workflow(
-                Ex(), st, bpmn, bindings, execution_check=chk
-            )
+            await run_bpmn_workflow(Ex(), st, bpmn, bindings, execution_check=chk)
 
         asyncio.run(run())
         eng = getattr(st, "_bpmn_engine_state", {})
@@ -1318,12 +1293,10 @@ class BpmnTaskRetryTests(TestCase):
                 n[0] += 1
                 if n[0] < 3:
                     raise BpmnRetryableTaskError("retry")
-                return None
+                return
 
         st = _state()
-        asyncio.run(
-            run_bpmn_workflow(Ex(), st, bpmn, bindings, max_task_retries=5)
-        )
+        asyncio.run(run_bpmn_workflow(Ex(), st, bpmn, bindings, max_task_retries=5))
         self.assertEqual(n[0], 3)
 
     def test_bpmn_retry_limit_exceeded_fails_run(self):
@@ -1357,9 +1330,7 @@ class BpmnTaskRetryTests(TestCase):
                 raise BpmnRetryableTaskError("always")
 
         with self.assertRaises(BpmnEngineError) as ctx:
-            asyncio.run(
-                run_bpmn_workflow(Ex(), _state(), bpmn, bindings, max_task_retries=0)
-            )
+            asyncio.run(run_bpmn_workflow(Ex(), _state(), bpmn, bindings, max_task_retries=0))
         self.assertEqual(ctx.exception.failure_reason, "retry_exhausted")
 
     def test_bpmn_parallel_branch_retry_preserves_pending_join_state(self):
@@ -1378,15 +1349,13 @@ class BpmnTaskRetryTests(TestCase):
                 b_n[0] += 1
                 if b_n[0] == 1:
                     raise BpmnRetryableTaskError("transient")
-                return None
+                return
 
             async def task_after(self, s):
                 return None
 
         st = _state()
-        asyncio.run(
-            run_bpmn_workflow(Ex(), st, bpmn, bindings, max_task_retries=2)
-        )
+        asyncio.run(run_bpmn_workflow(Ex(), st, bpmn, bindings, max_task_retries=2))
         eng = getattr(st, "_bpmn_engine_state", {})
         self.assertEqual(eng.get("pending_joins"), {})
         self.assertIn("taskAfter", st.workflow_steps)
@@ -1548,15 +1517,15 @@ class SubprocessEngineTests(TestCase):
         class Ex:
             async def pre(self, s):
                 calls.append("pre")
-                return None
+                return
 
             async def inner(self, s):
                 calls.append("inner")
-                return None
+                return
 
             async def post(self, s):
                 calls.append("post")
-                return None
+                return
 
         st = _state()
         asyncio.run(run_bpmn_workflow(Ex(), st, bpmn, bindings))
@@ -1694,27 +1663,27 @@ class SubprocessEngineTests(TestCase):
         class Ex:
             async def pre(self, s):
                 calls.append("pre")
-                return None
+                return
 
             async def ent(self, s):
                 calls.append("ent")
-                return None
+                return
 
             async def ha(self, s):
                 calls.append("ha")
-                return None
+                return
 
             async def hb(self, s):
                 calls.append("hb")
-                return None
+                return
 
             async def merge(self, s):
                 calls.append("merge")
-                return None
+                return
 
             async def post(self, s):
                 calls.append("post")
-                return None
+                return
 
         st = _state()
         asyncio.run(run_bpmn_workflow(Ex(), st, bpmn, bindings))
@@ -1746,17 +1715,19 @@ class SubprocessEngineTests(TestCase):
             async def inner(self, s):
                 inner_n[0] += 1
                 if inner_n[0] == 1:
-                    raise TaskPendingException("h", "human", s, "tin")
-                return None
+                    raise TaskPendingError("h", "human", s, "tin")
+                return
 
             async def post(self, s):
                 return None
 
         st = _state()
-        with self.assertRaises(TaskPendingException):
+        with self.assertRaises(TaskPendingError):
             asyncio.run(run_bpmn_workflow(Ex1(), st, bpmn, bindings))
         stack = getattr(st, "_bpmn_engine_state", {}).get("subprocess_stack") or []
-        self.assertTrue(any(str(x.get("subprocess_id")) == "sp" for x in stack if isinstance(x, dict)))
+        self.assertTrue(
+            any(str(x.get("subprocess_id")) == "sp" for x in stack if isinstance(x, dict))
+        )
 
         eng = normalize_engine_state(dict(getattr(st, "_bpmn_engine_state", {})))
         st.__dict__["_bpmn_engine_state"] = eng
@@ -1771,7 +1742,5 @@ class SubprocessEngineTests(TestCase):
             async def post(self, s):
                 return None
 
-        asyncio.run(
-            run_bpmn_workflow(Ex2(), st, bpmn, bindings, start_from_task_id="tin")
-        )
+        asyncio.run(run_bpmn_workflow(Ex2(), st, bpmn, bindings, start_from_task_id="tin"))
         self.assertIn("t_post", getattr(st, "workflow_steps", []))

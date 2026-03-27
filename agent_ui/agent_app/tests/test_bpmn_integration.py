@@ -12,7 +12,7 @@ from agent_app.bpmn_engine import (
     get_next_step_for_resume,
     run_bpmn_workflow,
 )
-from agent_app.task_service import TaskPendingException
+from agent_app.task_service import TaskPendingError
 from agent_app.workflow_context import get_first_task_id, normalize_bindings
 
 
@@ -68,16 +68,16 @@ class _ExecutorLinear:
 
     async def task1(self, state):
         self.calls.append("task1")
-        return None
+        return
 
     async def task2(self, state):
         self.calls.append("task2")
-        return None
+        return
 
 
 class _ExecutorPausesAfterTask1:
     async def task1(self, state):
-        raise TaskPendingException("task1", "human_task", state, "task2")
+        raise TaskPendingError("task1", "human_task", state, "task2")
 
     async def task2(self, state):
         return None
@@ -111,7 +111,7 @@ class BpmnIntegrationTests(TestCase):
         state = _MinimalState()
         executor = _ExecutorPausesAfterTask1()
 
-        with self.assertRaises(TaskPendingException) as ctx:
+        with self.assertRaises(TaskPendingError) as ctx:
             asyncio.run(run_bpmn_workflow(executor, state, bpmn, bindings))
 
         next_step = get_next_step_for_resume(ctx.exception.state)
@@ -264,7 +264,7 @@ class BpmnIntegrationTests(TestCase):
         state = _MinimalState()
         executor_pause = _ExecutorPausesAfterTask1()
 
-        with self.assertRaises(TaskPendingException) as ctx:
+        with self.assertRaises(TaskPendingError) as ctx:
             asyncio.run(run_bpmn_workflow(executor_pause, state, bpmn, bindings))
 
         eng = getattr(ctx.exception.state, "_bpmn_engine_state", None)

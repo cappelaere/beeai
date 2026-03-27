@@ -10,9 +10,9 @@ See **[BPMN_ENGINE_REVIEW.md](./BPMN_ENGINE_REVIEW.md)** §6 for current-state r
 
 ## Phase 1: Validate engine
 
-- [ ] Run BPMN-ready workflows (e.g. bi_weekly_report) in production/staging; confirm completion, pause/resume, run-detail UI  
-  - **Issue #7 — procedure and matrix:** [BPMN_STAGING_VALIDATION.md](../operations/BPMN_STAGING_VALIDATION.md) lists catalog workflows, data prerequisites, automated integration coverage (`test_workflow_runner_integration.py`), parallel/join strategy (`runner_parallel_fj_test` + tests), and **empty staging/production tables** for operators to fill with run IDs. **Remaining gap:** complete those tables in a real deployment, then check this item off.
-- [x] Fix any engine or runner bugs found — **none found** during Issue #7 doc work; file new issues if staging exercises reveal defects
+- [ ] Run BPMN-ready workflows (e.g. bi_weekly_report) in **production/staging**; confirm completion, pause/resume, run-detail UI  
+  - **Issue #7 — partial only:** [BPMN_STAGING_VALIDATION.md](../operations/BPMN_STAGING_VALIDATION.md) **§4** holds **local** test-DB history; **§3 (hosted)** must be filled with real run IDs on a deployed environment before this item can be checked. **2026-03-23:** Hosted matrices **not executed** in-repo (no staging/production URL or credentials in the workspace — see **§3.0** in that doc). Runner integration tests (`test_workflow_runner_integration`, 17 tests) cover engine mechanics only, not deploy sign-off.
+- [ ] Fix any engine or runner bugs found — **open:** [issue #9](https://github.com/cappelaere/beeai/issues/9) (product BPMN exclusive-gateway routing for `bidder_onboarding` / `dap_report`); `dap_report` agent import path hardening on branch
 - [x] Document “BPMN-engine-ready workflow” contract in developer guide ([workflows/docs/DEVELOPER_GUIDE.md](../../workflows/docs/DEVELOPER_GUIDE.md) — BPMN-ready workflow contract)
 
 ## Phase 2: Migrate workflows to BPMN-only

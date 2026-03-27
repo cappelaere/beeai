@@ -16,10 +16,12 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any
 
 from agent_app.bpmn_conditions import (
     evaluate_condition as _eval_parsed_condition,
+)
+from agent_app.bpmn_conditions import (
     parse_condition,
 )
 from agent_app.bpmn_parallel import (
@@ -36,15 +38,14 @@ from agent_app.bpmn_parallel import (
     replace_token_at_index_with_tokens,
 )
 from agent_app.task_service import (
-    BpmnIntermediateWaitException,
+    BpmnIntermediateWaitError,
     BpmnModeledBoundaryError,
     BpmnRetryableTaskError,
-    TaskPendingException,
+    TaskPendingError,
 )
 from agent_app.workflow_context import (
     element_subprocess_container,
     first_executable_after_join,
-    parse_parallel_join_sentinel,
     get_error_boundary_for_task,
     get_first_task_id,
     get_timer_boundary_for_task,
@@ -54,8 +55,9 @@ from agent_app.workflow_context import (
     is_intermediate_timer_catch,
     iso8601_duration_to_seconds,
     join_gateway_for_parallel_fork,
-    normalize_bindings,
     next_step_after_task_completion,
+    normalize_bindings,
+    parse_parallel_join_sentinel,
     resolve_outgoing_flows,
     resolve_position_after_service_task,
     subprocess_parent_continuation_target,
@@ -102,6 +104,85 @@ def _normalize_pending_joins(raw: Any) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _normalize_active_tokens(
+    raw_tokens: Any, fallback_current_node_ids: list[Any]
+) -> list[dict[str, Any]]:
+    tokens = raw_tokens if isinstance(raw_tokens, list) else []
+    norm_tokens: list[dict[str, Any]] = []
+    for token in tokens:
+        if isinstance(token, dict):
+            norm_tokens.append(
+                {
+                    "current_element_id": _normalize_optional_str_id(
+                        token.get("current_element_id")
+                    ),
+                    "branch_id": _normalize_optional_str_id(token.get("branch_id")),
+                }
+            )
+        else:
+            norm_tokens.append({"current_element_id": None, "branch_id": None})
+    if not norm_tokens or all(
+        t["current_element_id"] is None and t["branch_id"] is None for t in norm_tokens
+    ):
+        cur = (fallback_current_node_ids or [None])[0]
+        cur_n = _normalize_optional_str_id(cur) if cur is not None else None
+        return [asdict(BpmnToken(current_element_id=cur_n))]
+    return norm_tokens
+
+
+def _normalize_int_map(raw_map: Any) -> dict[str, int]:
+    if not isinstance(raw_map, dict):
+        return {}
+    clean: dict[str, int] = {}
+    for k, v in raw_map.items():
+        try:
+            clean[str(k)] = int(v)
+        except (TypeError, ValueError):
+            continue
+    return clean
+
+
+def _normalize_float_map(raw_map: Any) -> dict[str, float]:
+    if not isinstance(raw_map, dict):
+        return {}
+    return {str(k): float(v) for k, v in raw_map.items() if isinstance(v, (int, float))}
+
+
+def _normalize_optional_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _normalize_dict_list(value: Any, *, limit: int | None = None) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    items = value[-limit:] if isinstance(limit, int) and limit > 0 else value
+    return [dict(x) for x in items if isinstance(x, dict)]
+
+
+def _normalize_subprocess_stack(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    clean_ss: list[dict[str, Any]] = []
+    for x in value[:20]:
+        if not isinstance(x, dict):
+            continue
+        clean_ss.append(
+            {
+                "subprocess_id": str(x.get("subprocess_id") or "").strip(),
+                "name": str(x.get("name") or "").strip(),
+                "entered_at": str(x.get("entered_at") or "").strip(),
+                "parent_branch_id": _normalize_optional_str_id(x.get("parent_branch_id")),
+            }
+        )
+    return [f for f in clean_ss if f.get("subprocess_id")]
+
+
+def _normalize_satisfied_messages(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(x).strip() for x in value if isinstance(x, (str, int)) and str(x).strip()]
+
+
 def normalize_engine_state(raw: dict[str, Any] | None) -> dict[str, Any]:
     """
     Normalize persisted or partial engine_state to the v2+ contract (single- and multi-token).
@@ -116,106 +197,41 @@ def normalize_engine_state(raw: dict[str, Any] | None) -> dict[str, Any]:
     for key in ("completed_node_ids", "current_node_ids", "failed_node_ids"):
         v = out.get(key)
         out[key] = list(v) if isinstance(v, list) else []
-    tokens = out.get("active_tokens")
-    if not isinstance(tokens, list):
-        tokens = []
-    norm_tokens: list[dict[str, Any]] = []
-    for t in tokens:
-        if isinstance(t, dict):
-            ce = t.get("current_element_id")
-            br = t.get("branch_id")
-            norm_tokens.append(
-                {
-                    "current_element_id": _normalize_optional_str_id(ce),
-                    "branch_id": _normalize_optional_str_id(br),
-                }
-            )
-        else:
-            norm_tokens.append({"current_element_id": None, "branch_id": None})
-    if not norm_tokens:
-        cur = (out.get("current_node_ids") or [None])[0]
-        cur_n = _normalize_optional_str_id(cur) if cur is not None else None
-        norm_tokens = [asdict(BpmnToken(current_element_id=cur_n))]
-    elif norm_tokens and all(
-        t["current_element_id"] is None and t["branch_id"] is None for t in norm_tokens
-    ):
-        cur = (out.get("current_node_ids") or [None])[0]
-        cur_n = _normalize_optional_str_id(cur) if cur is not None else None
-        norm_tokens = [asdict(BpmnToken(current_element_id=cur_n))]
-    out["active_tokens"] = norm_tokens
+    out["active_tokens"] = _normalize_active_tokens(
+        out.get("active_tokens"), out.get("current_node_ids") or []
+    )
 
     out["pending_joins"] = _normalize_pending_joins(out.get("pending_joins"))
-
-    meta = out.get("condition_failure_metadata")
-    out["condition_failure_metadata"] = dict(meta) if isinstance(meta, dict) else {}
+    out["condition_failure_metadata"] = _normalize_optional_dict(
+        out.get("condition_failure_metadata")
+    )
     out["failed_node_id"] = _normalize_optional_str_id(out.get("failed_node_id"))
     out["failure_reason"] = _normalize_optional_str_id(out.get("failure_reason"))
     out["last_successful_node_id"] = _normalize_optional_str_id(out.get("last_successful_node_id"))
-    trc = out.get("task_retry_counts")
-    if not isinstance(trc, dict):
-        trc = {}
-    else:
-        trc_clean: dict[str, int] = {}
-        for k, v in trc.items():
-            try:
-                trc_clean[str(k)] = int(v)
-            except (TypeError, ValueError):
-                continue
-        trc = trc_clean
-    out["task_retry_counts"] = trc
-    lre = out.get("last_retryable_error")
-    out["last_retryable_error"] = dict(lre) if isinstance(lre, dict) else None
-    tem = out.get("task_entry_monotonic")
-    if not isinstance(tem, dict):
-        tem = {}
-    else:
-        tem = {str(k): float(v) for k, v in tem.items() if isinstance(v, (int, float))}
-    out["task_entry_monotonic"] = tem
-    bt = out.get("boundary_transitions")
-    if isinstance(bt, list):
-        out["boundary_transitions"] = [
-            dict(x) for x in bt if isinstance(x, dict)
-        ]
-    else:
-        out["boundary_transitions"] = []
-    lbt = out.get("last_boundary_transition")
-    out["last_boundary_transition"] = dict(lbt) if isinstance(lbt, dict) else None
-    bew = out.get("bpmn_event_wait")
-    out["bpmn_event_wait"] = dict(bew) if isinstance(bew, dict) else {}
-    sim = out.get("satisfied_intermediate_messages")
-    out["satisfied_intermediate_messages"] = [
-        str(x).strip() for x in sim if isinstance(x, (str, int)) and str(x).strip()
-    ] if isinstance(sim, list) else []
-    ict = out.get("intermediate_catch_transitions")
-    out["intermediate_catch_transitions"] = [
-        dict(x) for x in ict if isinstance(x, dict)
-    ] if isinstance(ict, list) else []
-    ss = out.get("subprocess_stack")
-    if isinstance(ss, list):
-        clean_ss: list[dict[str, Any]] = []
-        for x in ss[:20]:
-            if not isinstance(x, dict):
-                continue
-            clean_ss.append(
-                {
-                    "subprocess_id": str(x.get("subprocess_id") or "").strip(),
-                    "name": str(x.get("name") or "").strip(),
-                    "entered_at": str(x.get("entered_at") or "").strip(),
-                    "parent_branch_id": _normalize_optional_str_id(
-                        x.get("parent_branch_id")
-                    ),
-                }
-            )
-        out["subprocess_stack"] = [f for f in clean_ss if f.get("subprocess_id")]
-    else:
-        out["subprocess_stack"] = []
-    stt = out.get("subprocess_transitions")
-    if isinstance(stt, list):
-        out["subprocess_transitions"] = [
-            dict(x) for x in stt[-50:] if isinstance(x, dict)
-        ]
-    else:
-        out["subprocess_transitions"] = []
+    out["task_retry_counts"] = _normalize_int_map(out.get("task_retry_counts"))
+    out["last_retryable_error"] = (
+        _normalize_optional_dict(out.get("last_retryable_error"))
+        if isinstance(out.get("last_retryable_error"), dict)
+        else None
+    )
+    out["task_entry_monotonic"] = _normalize_float_map(out.get("task_entry_monotonic"))
+    out["boundary_transitions"] = _normalize_dict_list(out.get("boundary_transitions"))
+    out["last_boundary_transition"] = (
+        _normalize_optional_dict(out.get("last_boundary_transition"))
+        if isinstance(out.get("last_boundary_transition"), dict)
+        else None
+    )
+    out["bpmn_event_wait"] = _normalize_optional_dict(out.get("bpmn_event_wait"))
+    out["satisfied_intermediate_messages"] = _normalize_satisfied_messages(
+        out.get("satisfied_intermediate_messages")
+    )
+    out["intermediate_catch_transitions"] = _normalize_dict_list(
+        out.get("intermediate_catch_transitions")
+    )
+    out["subprocess_stack"] = _normalize_subprocess_stack(out.get("subprocess_stack"))
+    out["subprocess_transitions"] = _normalize_dict_list(
+        out.get("subprocess_transitions"), limit=50
+    )
     return out
 
 
@@ -454,7 +470,7 @@ def _pick_token_for_execution(
 def _init_engine_state_for_bpmn_run(
     state: Any,
     bpmn: dict[str, Any],
-    start_from_task_id: Optional[str],
+    start_from_task_id: str | None,
 ) -> dict[str, Any] | None:
     """
     Fresh run: single token at first (or resume) task.
@@ -665,9 +681,9 @@ def can_run_with_bpmn_engine(workflow_id: str) -> bool:
         return False
     if first in service_tasks:
         return True
-    if is_intermediate_timer_catch(bpmn, first) or is_intermediate_message_catch(bpmn, first):
-        return True
-    return False
+    return bool(
+        is_intermediate_timer_catch(bpmn, first) or is_intermediate_message_catch(bpmn, first)
+    )
 
 
 def _normalize_max_task_retries(max_task_retries: int) -> int:
@@ -759,9 +775,7 @@ async def _complete_subprocess_exit(
             condition_failure_metadata={},
         )
     seen: set[str] = {sp_id}
-    resolved = traverse_until_executable(
-        bpmn, tgt, seen, state, bindings, flow_selector
-    )
+    resolved = traverse_until_executable(bpmn, tgt, seen, state, bindings, flow_selector)
     bid = str(parent_branch or "").strip()
     if resolved is None:
         _raise_engine_failure(
@@ -781,17 +795,13 @@ async def _complete_subprocess_exit(
     if jid:
         append_token(engine_state, jid, parent_branch)
         if mark_branch_arrived_at_join(engine_state, jid, bid):
-            _merge_parallel_join(
-                engine_state, jid, bpmn, state, bindings, flow_selector
-            )
+            _merge_parallel_join(engine_state, jid, bpmn, state, bindings, flow_selector)
     else:
         nxt = str(resolved).strip()
         append_token(engine_state, nxt, parent_branch)
         sp_new = element_subprocess_container(bpmn, nxt)
         if sp_new:
-            _push_subprocess_frame(
-                engine_state, sp_new, bpmn, parent_branch_id=parent_branch
-            )
+            _push_subprocess_frame(engine_state, sp_new, bpmn, parent_branch_id=parent_branch)
     _sync_current_node_ids_from_tokens(engine_state)
 
 
@@ -832,7 +842,7 @@ async def _route_token_through_boundary(
     boundary_type: str,
     attached_to: str,
     reason: str,
-    send_message: Optional[Callable[[str, Any], Any]],
+    send_message: Callable[[str, Any], Any] | None,
 ) -> None:
     _record_boundary_transition(
         engine_state,
@@ -915,16 +925,12 @@ async def _advance_past_intermediate_catch(
         [dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]],
         str | None,
     ],
-    send_message: Optional[Callable[[str, Any], Awaitable[Any]]],
+    send_message: Callable[[str, Any], Awaitable[Any]] | None,
 ) -> None:
     _append_completed_node(engine_state, event_id)
-    _record_intermediate_catch_transition(
-        engine_state, event_id=event_id, catch_type=catch_type
-    )
+    _record_intermediate_catch_transition(engine_state, event_id=event_id, catch_type=catch_type)
     engine_state["bpmn_event_wait"] = {}
-    resolved = traverse_until_executable(
-        bpmn, out_target, set(), state, bindings, flow_selector
-    )
+    resolved = traverse_until_executable(bpmn, out_target, set(), state, bindings, flow_selector)
     idx = token_index
     if resolved is None:
         _raise_engine_failure(
@@ -960,19 +966,13 @@ async def _advance_past_intermediate_catch(
         )
 
 
-async def _process_intermediate_catch_token(
+def _get_intermediate_catch_token_context(
     *,
     engine_state: dict[str, Any],
     token_index: int,
     bpmn: dict[str, Any],
     state: Any,
-    bindings: dict[str, Any],
-    flow_selector: Callable[
-        [dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]],
-        str | None,
-    ],
-    send_message: Optional[Callable[[str, Any], Awaitable[Any]]],
-) -> None:
+) -> tuple[dict[str, Any], str, str | None, str]:
     toks = engine_state.get("active_tokens") or []
     if len(toks) != 1:
         _raise_engine_failure(
@@ -998,66 +998,43 @@ async def _process_intermediate_catch_token(
             failure_reason="intermediate_catch_invalid",
             failed_node_id=eid,
         )
+    return tok, eid, branch_id, out_tgt
 
-    if is_intermediate_timer_catch(bpmn, eid):
-        el = (bpmn.get("elements") or {}).get(eid) or {}
-        dur = iso8601_duration_to_seconds(str(el.get("catch_duration_iso") or "")) or 0.0
-        wait = engine_state.get("bpmn_event_wait") or {}
-        if (
-            isinstance(wait, dict)
-            and str(wait.get("waiting_event_id") or "") == eid
-            and wait.get("waiting_event_type") == "timer"
-        ):
-            try:
-                deadline = float(wait.get("timer_deadline_ts") or 0)
-            except (TypeError, ValueError):
-                deadline = 0.0
-            if time.time() >= deadline:
-                await _advance_past_intermediate_catch(
-                    engine_state=engine_state,
-                    token_index=token_index,
-                    branch_id=branch_id,
-                    event_id=eid,
-                    catch_type="timer",
-                    out_target=out_tgt,
-                    bpmn=bpmn,
-                    state=state,
-                    bindings=bindings,
-                    flow_selector=flow_selector,
-                    send_message=send_message,
-                )
-                return
-        deadline = time.time() + max(dur, 0.001)
-        engine_state["bpmn_event_wait"] = {
-            "waiting_event_id": eid,
-            "waiting_event_type": "timer",
-            "timer_deadline_ts": deadline,
-            "timer_deadline_iso": datetime.fromtimestamp(deadline, UTC).isoformat(),
-            "branch_id": branch_id,
-        }
-        if hasattr(state, "__dict__"):
-            state.__dict__["_bpmn_engine_state"] = normalize_engine_state(engine_state)
-            state.__dict__["_bpmn_next_step"] = eid
-        raise BpmnIntermediateWaitException(state, eid, "timer")
 
-    if is_intermediate_message_catch(bpmn, eid):
-        el = (bpmn.get("elements") or {}).get(eid) or {}
-        mk = str(el.get("catch_message_key") or "").strip()
-        satisfied_raw = engine_state.get("satisfied_intermediate_messages") or []
-        sat_set = {
-            str(x).strip()
-            for x in satisfied_raw
-            if isinstance(x, (str, int)) and str(x).strip()
-        }
-        if mk and mk in sat_set:
-            sat_set.discard(mk)
-            engine_state["satisfied_intermediate_messages"] = sorted(sat_set)
+async def _handle_intermediate_timer_catch(
+    *,
+    engine_state: dict[str, Any],
+    token_index: int,
+    bpmn: dict[str, Any],
+    state: Any,
+    bindings: dict[str, Any],
+    flow_selector: Callable[
+        [dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]], str | None
+    ],
+    send_message: Callable[[str, Any], Awaitable[Any]] | None,
+    eid: str,
+    branch_id: str | None,
+    out_tgt: str,
+) -> bool:
+    el = (bpmn.get("elements") or {}).get(eid) or {}
+    dur = iso8601_duration_to_seconds(str(el.get("catch_duration_iso") or "")) or 0.0
+    wait = engine_state.get("bpmn_event_wait") or {}
+    if (
+        isinstance(wait, dict)
+        and str(wait.get("waiting_event_id") or "") == eid
+        and wait.get("waiting_event_type") == "timer"
+    ):
+        try:
+            deadline = float(wait.get("timer_deadline_ts") or 0)
+        except (TypeError, ValueError):
+            deadline = 0.0
+        if time.time() >= deadline:
             await _advance_past_intermediate_catch(
                 engine_state=engine_state,
                 token_index=token_index,
                 branch_id=branch_id,
                 event_id=eid,
-                catch_type="message",
+                catch_type="timer",
                 out_target=out_tgt,
                 bpmn=bpmn,
                 state=state,
@@ -1065,17 +1042,120 @@ async def _process_intermediate_catch_token(
                 flow_selector=flow_selector,
                 send_message=send_message,
             )
-            return
-        engine_state["bpmn_event_wait"] = {
-            "waiting_event_id": eid,
-            "waiting_event_type": "message",
-            "message_key": mk,
-            "branch_id": branch_id,
-        }
-        if hasattr(state, "__dict__"):
-            state.__dict__["_bpmn_engine_state"] = normalize_engine_state(engine_state)
-            state.__dict__["_bpmn_next_step"] = eid
-        raise BpmnIntermediateWaitException(state, eid, "message")
+            return True
+    deadline = time.time() + max(dur, 0.001)
+    engine_state["bpmn_event_wait"] = {
+        "waiting_event_id": eid,
+        "waiting_event_type": "timer",
+        "timer_deadline_ts": deadline,
+        "timer_deadline_iso": datetime.fromtimestamp(deadline, UTC).isoformat(),
+        "branch_id": branch_id,
+    }
+    if hasattr(state, "__dict__"):
+        state.__dict__["_bpmn_engine_state"] = normalize_engine_state(engine_state)
+        state.__dict__["_bpmn_next_step"] = eid
+    raise BpmnIntermediateWaitError(state, eid, "timer")
+
+
+async def _handle_intermediate_message_catch(
+    *,
+    engine_state: dict[str, Any],
+    token_index: int,
+    bpmn: dict[str, Any],
+    state: Any,
+    bindings: dict[str, Any],
+    flow_selector: Callable[
+        [dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]], str | None
+    ],
+    send_message: Callable[[str, Any], Awaitable[Any]] | None,
+    eid: str,
+    branch_id: str | None,
+    out_tgt: str,
+) -> bool:
+    el = (bpmn.get("elements") or {}).get(eid) or {}
+    mk = str(el.get("catch_message_key") or "").strip()
+    satisfied_raw = engine_state.get("satisfied_intermediate_messages") or []
+    sat_set = {
+        str(x).strip() for x in satisfied_raw if isinstance(x, (str, int)) and str(x).strip()
+    }
+    if mk and mk in sat_set:
+        sat_set.discard(mk)
+        engine_state["satisfied_intermediate_messages"] = sorted(sat_set)
+        await _advance_past_intermediate_catch(
+            engine_state=engine_state,
+            token_index=token_index,
+            branch_id=branch_id,
+            event_id=eid,
+            catch_type="message",
+            out_target=out_tgt,
+            bpmn=bpmn,
+            state=state,
+            bindings=bindings,
+            flow_selector=flow_selector,
+            send_message=send_message,
+        )
+        return True
+    engine_state["bpmn_event_wait"] = {
+        "waiting_event_id": eid,
+        "waiting_event_type": "message",
+        "message_key": mk,
+        "branch_id": branch_id,
+    }
+    if hasattr(state, "__dict__"):
+        state.__dict__["_bpmn_engine_state"] = normalize_engine_state(engine_state)
+        state.__dict__["_bpmn_next_step"] = eid
+    raise BpmnIntermediateWaitError(state, eid, "message")
+
+
+async def _process_intermediate_catch_token(
+    *,
+    engine_state: dict[str, Any],
+    token_index: int,
+    bpmn: dict[str, Any],
+    state: Any,
+    bindings: dict[str, Any],
+    flow_selector: Callable[
+        [dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]],
+        str | None,
+    ],
+    send_message: Callable[[str, Any], Awaitable[Any]] | None,
+) -> None:
+    _, eid, branch_id, out_tgt = _get_intermediate_catch_token_context(
+        engine_state=engine_state,
+        token_index=token_index,
+        bpmn=bpmn,
+        state=state,
+    )
+
+    if is_intermediate_timer_catch(bpmn, eid):
+        await _handle_intermediate_timer_catch(
+            engine_state=engine_state,
+            token_index=token_index,
+            bpmn=bpmn,
+            state=state,
+            bindings=bindings,
+            flow_selector=flow_selector,
+            send_message=send_message,
+            eid=eid,
+            branch_id=branch_id,
+            out_tgt=out_tgt,
+        )
+        return
+
+    if is_intermediate_message_catch(bpmn, eid):
+        await _handle_intermediate_message_catch(
+            engine_state=engine_state,
+            token_index=token_index,
+            bpmn=bpmn,
+            state=state,
+            bindings=bindings,
+            flow_selector=flow_selector,
+            send_message=send_message,
+            eid=eid,
+            branch_id=branch_id,
+            out_tgt=out_tgt,
+        )
+        return
 
     _raise_engine_failure(
         message=f"Unsupported intermediate catch at {eid!r}.",
@@ -1124,7 +1204,9 @@ def _resolve_task_execution_context(
     state: Any,
     bpmn: dict[str, Any],
     bindings: dict[str, Any],
-    flow_selector: Callable[[dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]], str | None],
+    flow_selector: Callable[
+        [dict[str, Any], str, list[tuple[str, str, str]], Any, dict[str, Any]], str | None
+    ],
 ) -> tuple[dict[str, Any], str, str | None, Callable[[Any], Awaitable[Any]], str | None]:
     tok = engine_state["active_tokens"][token_index]
     current = tok.get("current_element_id")
@@ -1196,21 +1278,26 @@ async def _invoke_task_method(
     state: Any,
     current: str,
     next_for_pause: str | None,
-    send_message: Optional[Callable[[str, Any], Any]],
+    send_message: Callable[[str, Any], Any] | None,
 ) -> Any:
     if send_message:
         await send_message("step", current)
     await asyncio.sleep(0.05)
 
     result = await method(state)
-    if result is not None and isinstance(result, str) and result.strip():
-        if next_for_pause and result.strip() != next_for_pause:
-            logger.debug(
-                "Task %r returned %r; ignoring for routing (BPMN next is %r)",
-                current,
-                result.strip(),
-                next_for_pause,
-            )
+    if (
+        result is not None
+        and isinstance(result, str)
+        and result.strip()
+        and next_for_pause
+        and result.strip() != next_for_pause
+    ):
+        logger.debug(
+            "Task %r returned %r; ignoring for routing (BPMN next is %r)",
+            current,
+            result.strip(),
+            next_for_pause,
+        )
     try:
         out = getattr(state, "model_dump", None)
         if callable(out):
@@ -1230,7 +1317,7 @@ async def _handle_retryable_task_error(
     branch_id: str | None,
     current_key: str,
     max_task_retries: int,
-    send_message: Optional[Callable[[str, Any], Any]],
+    send_message: Callable[[str, Any], Any] | None,
     state: Any,
 ) -> None:
     trc = engine_state.setdefault("task_retry_counts", {})
@@ -1289,9 +1376,9 @@ async def run_bpmn_workflow(  # noqa: C901
     bpmn: dict[str, Any],
     bindings: dict[str, Any],
     *,
-    start_from_task_id: Optional[str] = None,
-    send_message: Optional[Callable[[str, Any], Any]] = None,
-    execution_check: Optional[Callable[[], Awaitable[Optional[str]]]] = None,
+    start_from_task_id: str | None = None,
+    send_message: Callable[[str, Any], Any] | None = None,
+    execution_check: Callable[[], Awaitable[str | None]] | None = None,
     max_task_retries: int = 0,
 ) -> Any:
     """
@@ -1312,8 +1399,8 @@ async def run_bpmn_workflow(  # noqa: C901
         The state object after execution.
 
     Raises:
-        TaskPendingException: When a handler pauses for a human task (re-raise to let runner save progress).
-        BpmnIntermediateWaitException: Timer/message catch not satisfied (PAR-015); runner persists and resumes.
+        TaskPendingError: When a handler pauses for a human task (re-raise to let runner save progress).
+        BpmnIntermediateWaitError: Timer/message catch not satisfied (PAR-015); runner persists and resumes.
         BpmnEngineError: On engine failures including cooperative cancel/timeout.
         ValueError: When a bound handler is missing on the executor.
     """
@@ -1429,9 +1516,7 @@ async def run_bpmn_workflow(  # noqa: C901
         tkey = _task_retry_key(branch_id, current_key)
         pending_q = engine_state.get("_pending_timer_skip_reentry_queue")
         skip_timer_once = (
-            isinstance(pending_q, list)
-            and len(pending_q) > 0
-            and pending_q[0] == tkey
+            isinstance(pending_q, list) and len(pending_q) > 0 and pending_q[0] == tkey
         )
         if skip_timer_once and isinstance(pending_q, list):
             pending_q.pop(0)
@@ -1471,7 +1556,7 @@ async def run_bpmn_workflow(  # noqa: C901
                 next_for_pause=next_for_pause,
                 send_message=send_message,
             )
-        except TaskPendingException:
+        except TaskPendingError:
             _append_completed_node(engine_state, current)
             # Successor may be join → next_for_pause is None; keep token on current task for resume.
             pause_pos = next_for_pause if next_for_pause is not None else current
@@ -1535,9 +1620,8 @@ async def run_bpmn_workflow(  # noqa: C901
         _clear_task_retry_slot(engine_state, branch_id, current_key)
         _clear_task_entry_monotonic(engine_state, branch_id, current_key)
 
-        if not getattr(state, "workflow_steps", None):
-            if hasattr(state, "__dict__"):
-                state.__dict__["workflow_steps"] = []
+        if not getattr(state, "workflow_steps", None) and hasattr(state, "__dict__"):
+            state.__dict__["workflow_steps"] = []
         if current not in state.workflow_steps:
             state.workflow_steps.append(current)
 
@@ -1672,9 +1756,9 @@ async def run_bpmn_workflow(  # noqa: C901
     return state
 
 
-def get_next_step_for_resume(state: Any) -> Optional[str]:
+def get_next_step_for_resume(state: Any) -> str | None:
     """
-    After a TaskPendingException, return the BPMN task id to resume from.
+    After a TaskPendingError, return the BPMN task id to resume from.
     The engine sets state._bpmn_next_step when pausing.
     """
     if state is None:

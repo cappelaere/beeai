@@ -3,6 +3,7 @@ Model Tests for RealtyIQ Agent UI
 Tests model creation, validation, and relationships
 """
 
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -173,7 +174,7 @@ class PromptSuggestionModelTests(TestCase):
         """Test that prompts must be unique"""
         PromptSuggestion.objects.create(prompt="Test prompt")
 
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             PromptSuggestion.objects.create(prompt="Test prompt")
 
     def test_suggestion_ordering(self):

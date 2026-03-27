@@ -9,16 +9,16 @@
     <bpmn:sequenceFlow id="Flow_2_to_3" sourceRef="check_property_status" targetRef="check_sam_compliance" />
     <bpmn:serviceTask id="check_sam_compliance" name="Check SAM.gov compliance" />
     <bpmn:sequenceFlow id="Flow_3_to_gateway" sourceRef="check_sam_compliance" targetRef="Gateway_SAM_Decision" />
-    <bpmn:exclusiveGateway id="Gateway_SAM_Decision" name="SAM Passed?">
+    <bpmn:exclusiveGateway id="Gateway_SAM_Decision" name="SAM Passed?" default="Flow_gateway_no">
       <bpmn:incoming>Flow_3_to_gateway</bpmn:incoming>
       <bpmn:outgoing>Flow_gateway_yes</bpmn:outgoing>
       <bpmn:outgoing>Flow_gateway_no</bpmn:outgoing>
     </bpmn:exclusiveGateway>
     <bpmn:sequenceFlow id="Flow_gateway_yes" name="Yes" sourceRef="Gateway_SAM_Decision" targetRef="check_ofac_compliance">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${sam_passed == true}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">state.sam_passed == true</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_gateway_no" name="No" sourceRef="Gateway_SAM_Decision" targetRef="finalize_status">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${sam_passed == false}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">state.sam_passed == false</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:serviceTask id="check_ofac_compliance" name="Check OFAC SDN compliance" />
     <bpmn:sequenceFlow id="Flow_4_to_5" sourceRef="check_ofac_compliance" targetRef="determine_eligibility" />

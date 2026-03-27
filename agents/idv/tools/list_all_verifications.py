@@ -24,13 +24,13 @@ from ._django_ready import get_identity_verification_model
 
 def _list_verifications_sync(status: str, limit: int, offset: int) -> str:
     """Synchronous helper function for database queries"""
-    IdentityVerification = get_identity_verification_model()
+    identity_verification_model = get_identity_verification_model()
     # Validate and cap limit
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
 
     # Build query
-    query = IdentityVerification.objects.all()
+    query = identity_verification_model.objects.all()
     now = timezone.now()
 
     # Filter by status

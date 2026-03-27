@@ -85,6 +85,7 @@ def validate_all_metadata(repo_root: Path | None = None) -> tuple[list[str], lis
         repo_root = WORKFLOW_REPO_ROOT
 
     from agents.registry import get_registry_path
+
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -96,7 +97,7 @@ def validate_all_metadata(repo_root: Path | None = None) -> tuple[list[str], lis
         try:
             import yaml
 
-            with open(agents_path) as f:
+            with agents_path.open() as f:
                 data = yaml.safe_load(f)
             errs = validate_agents_registry(data or {})
             errors.extend(errs)
@@ -108,8 +109,10 @@ def validate_all_metadata(repo_root: Path | None = None) -> tuple[list[str], lis
     if not workflows_dir.is_dir():
         errors.append(f"Workflows directory not found: {workflows_dir}")
     else:
+        from agent_app.workflow_registry import _should_skip_workflow_path
+
         for wf_path in workflows_dir.iterdir():
-            if not wf_path.is_dir() or wf_path.name.startswith("."):
+            if _should_skip_workflow_path(wf_path):
                 continue
             meta_file = wf_path / "metadata.yaml"
             if not meta_file.exists():
@@ -118,7 +121,7 @@ def validate_all_metadata(repo_root: Path | None = None) -> tuple[list[str], lis
             try:
                 import yaml
 
-                with open(meta_file) as f:
+                with meta_file.open() as f:
                     data = yaml.safe_load(f)
                 errs = validate_workflow_metadata(data or {}, wf_path.name)
                 errors.extend(errs)

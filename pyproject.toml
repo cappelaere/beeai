@@ -47,6 +47,7 @@ select = [
 
 # Disable specific rules that may be too strict
 ignore = [
+    "E402",   # Module import not at top of file
     "E501",   # Line too long (handled by formatter)
     "S101",   # Use of assert (OK in tests)
     "S105",   # Possible hardcoded password (false positives)

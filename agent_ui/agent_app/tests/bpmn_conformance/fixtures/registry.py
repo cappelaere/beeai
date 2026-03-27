@@ -21,6 +21,7 @@ def _state_x(x: int):
 
 # --- BPMN dicts (aligned with test_bpmn_engine / test_workflow_context) ---
 
+
 def _bpmn_linear():
     return {
         "elements": {
@@ -595,7 +596,9 @@ VALIDATION_FIXTURES_BY_ID = {f.id: f for f in VALIDATION_FIXTURES}
 
 PAUSE_RESUME_FIXTURES = [f for f in EXECUTION_FIXTURES if "pause_resume" in f.tags]
 
-FAILURE_METADATA_FIXTURE_IDS = frozenset(f.id for f in EXECUTION_FIXTURES if "failure_metadata" in f.tags)
+FAILURE_METADATA_FIXTURE_IDS = frozenset(
+    f.id for f in EXECUTION_FIXTURES if "failure_metadata" in f.tags
+)
 
 EXECUTION_COMPLETE_FIXTURES = [
     f for f in EXECUTION_FIXTURES if f.expect.outcome == "complete" and "pause_resume" not in f.tags

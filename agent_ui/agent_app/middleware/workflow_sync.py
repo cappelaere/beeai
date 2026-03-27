@@ -6,24 +6,49 @@ access the database during app initialization (avoids RuntimeWarning).
 """
 
 import logging
+import threading
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-_done = False
+
+@dataclass
+class _SyncState:
+    """Holds workflow-sync lifecycle flags and lock ownership."""
+
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    done: bool = False
+    started: bool = False
 
 
-def ensure_workflow_registry_synced():
-    """Sync workflow registry to Workflow model once per process. Safe to call from middleware."""
-    global _done
-    if _done:
-        return
-    _done = True
+_sync_state = _SyncState()
+
+
+def _sync_in_background() -> None:
+    """Run sync without blocking request handling."""
+    ok = False
     try:
         from agent_app.workflow_registry import workflow_registry
 
         workflow_registry._sync_workflow_model()
+        ok = True
     except Exception as e:
         logger.warning("Could not sync workflow registry to Workflow model: %s", e)
+    finally:
+        with _sync_state.lock:
+            _sync_state.done = ok
+            _sync_state.started = False
+
+
+def ensure_workflow_registry_synced():
+    """Start workflow registry sync once per process, without blocking requests."""
+    if _sync_state.done or _sync_state.started:
+        return
+    with _sync_state.lock:
+        if _sync_state.done or _sync_state.started:
+            return
+        _sync_state.started = True
+    threading.Thread(target=_sync_in_background, daemon=True, name="workflow-registry-sync").start()
 
 
 class WorkflowSyncMiddleware:

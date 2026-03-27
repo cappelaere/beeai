@@ -105,7 +105,7 @@ async def _handle_workflow_success(
 async def _handle_task_pending(
     run, task_exc, channel_layer, run_id: str, workflow_user_id: int
 ) -> dict[str, Any]:
-    """Handle TaskPendingException when workflow is waiting for human task."""
+    """Handle TaskPendingError when workflow is waiting for human task."""
     next_step = getattr(task_exc, "next_step", "unknown")
 
     # Update workflow status to waiting_for_task
@@ -184,14 +184,14 @@ async def _handle_workflow_error(run, error: Exception, run_id: str) -> dict[str
 async def _execute_workflow_with_capture(
     executor_instance, run, channel_layer, run_id: str, workflow_user_id: int
 ) -> tuple[Any, Any]:
-    """Execute workflow via BPMN engine only. Returns (result, None) or (None, TaskPendingException)."""
+    """Execute workflow via BPMN engine only. Returns (result, None) or (None, TaskPendingError)."""
     from agent_app.bpmn_engine import (
+        _get_bindings_and_bpmn,
         can_run_with_bpmn_engine,
         create_initial_state_from_inputs,
         run_bpmn_workflow,
-        _get_bindings_and_bpmn,
     )
-    from agent_app.task_service import TaskPendingException
+    from agent_app.task_service import TaskPendingError
 
     workflow_id = run.workflow_id
     if not can_run_with_bpmn_engine(workflow_id):
@@ -211,7 +211,7 @@ async def _execute_workflow_with_capture(
         result = type("Result", (), {"state": state})()
         sys.stdout = original_stdout
         return result, None
-    except TaskPendingException as task_exc:
+    except TaskPendingError as task_exc:
         sys.stdout = original_stdout
         return None, task_exc
     except Exception:

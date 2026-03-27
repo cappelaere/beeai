@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 from agent_app.bpmn_engine import BpmnEngineError, normalize_engine_state, run_bpmn_workflow
-from agent_app.task_service import BpmnRetryableTaskError, TaskPendingException
+from agent_app.task_service import BpmnRetryableTaskError, TaskPendingError
 from agent_app.tests.bpmn_conformance.schema import (
     ExecutionFixture,
     ValidationFixture,
@@ -32,23 +32,21 @@ def _make_handler(
     # Bound as executor instance methods: first arg is self (see run_bpmn_workflow getattr + call).
     async def _fn(self, state: Any):
         if behavior == "ok":
-            return None
+            return
         if behavior == "retryable_once":
             k = task_id
             counters[k] = counters.get(k, 0) + 1
             if counters[k] == 1:
                 raise BpmnRetryableTaskError(f"retry_{task_id}")
-            return None
+            return
         if behavior == "retry_always":
             raise BpmnRetryableTaskError(f"always_{task_id}")
         if behavior == "fail_runtime":
             raise RuntimeError(f"fail_{task_id}")
         if behavior == "pause_human":
             if task_id == task_id_for_pause:
-                raise TaskPendingException(
-                    f"ht_{task_id}", "human_task", state, pause_next or task_id
-                )
-            return None
+                raise TaskPendingError(f"ht_{task_id}", "human_task", state, pause_next or task_id)
+            return
         raise ValueError(f"unknown behavior {behavior}")
 
     return _fn
@@ -116,9 +114,9 @@ def run_execution_fixture(f: ExecutionFixture) -> Any:
         )
 
     if f.expect.outcome == "task_pending":
-        with _expect_raises(TaskPendingException):
+        with _expect_raises(TaskPendingError):
             asyncio.run(_run())
-        eng = normalize_engine_state(getattr(state, "_bpmn_engine_state", None))
+        normalize_engine_state(getattr(state, "_bpmn_engine_state", None))
         assert f.pause_next_step, f.id
         asyncio.run(_run(start_from=f.pause_next_step))
         _assert_expect_complete(state, f, phase2=True)

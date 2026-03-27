@@ -68,7 +68,7 @@ def _handle_logs_show(args, log_files, log_dir):
         }
 
     try:
-        with open(log_file, encoding="utf-8") as f:
+        with log_file.open(encoding="utf-8") as f:
             all_lines = f.readlines()
             lines_to_show = all_lines[-tail_lines:] if tail_lines > 0 else all_lines
             content = "".join(lines_to_show)

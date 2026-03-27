@@ -11,8 +11,6 @@ if str(_TOOLS_DIR) not in sys.path:
 
 from beeai_framework.tools.search.duckduckgo import DuckDuckGoSearchTool
 from beeai_framework.tools.think import ThinkTool
-
-from agents.base import AgentConfig
 from bpmn_tools import (
     analyze_bpmn_diagram,
     apply_bpmn_diagram,
@@ -31,6 +29,7 @@ from workflow_tools import (
     list_workflows,
 )
 
+from agents.base import AgentConfig
 
 BPMN_EXPERT_AGENT_CONFIG = AgentConfig(
     name="BPMN Expert",

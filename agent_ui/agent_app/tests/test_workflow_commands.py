@@ -6,7 +6,6 @@ This test demonstrates the full workflow lifecycle using /cmds commands
 import json
 import time
 
-from django.contrib.sessions.backends.db import SessionStore
 from django.test import Client, TestCase
 
 from agent_app.models import ChatSession, HumanTask
@@ -20,14 +19,11 @@ class WorkflowCommandsTest(TestCase):
         """Set up test client and session"""
         self.client = Client()
 
-        # Create a session
-        self.session = SessionStore()
+        # Create a session via test client so request.session resolves consistently.
+        self.session = self.client.session
         self.session["user_id"] = 1
         self.session["user_role"] = "admin"
         self.session.save()
-
-        # Set session cookie
-        self.client.cookies["sessionid"] = self.session.session_key
 
         # Create a chat session for context
         self.chat_session = ChatSession.objects.create(
@@ -710,13 +706,11 @@ class WorkflowCommandsAPITest(TestCase):
         """Set up test client"""
         self.client = Client()
 
-        # Create session
-        self.session = SessionStore()
+        # Create session via test client so request.session resolves consistently.
+        self.session = self.client.session
         self.session["user_id"] = 1
         self.session["user_role"] = "admin"
         self.session.save()
-
-        self.client.cookies["sessionid"] = self.session.session_key
 
     def test_direct_api_flow(self):
         """Test workflow execution via direct API"""

@@ -309,7 +309,7 @@ class WorkflowRun(models.Model):
             out: dict = {}
             pj = eng.get("pending_joins") if isinstance(eng.get("pending_joins"), dict) else {}
             if pj:
-                out["parallel_failure_waiting_join_ids"] = sorted(str(k) for k in pj.keys())
+                out["parallel_failure_waiting_join_ids"] = sorted(str(k) for k in pj)
                 tokens = (
                     eng.get("active_tokens") if isinstance(eng.get("active_tokens"), list) else []
                 )
@@ -320,7 +320,7 @@ class WorkflowRun(models.Model):
                     and t.get("current_element_id")
                     and str(t["current_element_id"]) in pj
                 ]
-                out["parallel_failure_branches_at_join"] = sorted(set(str(x) for x in at_join if x))
+                out["parallel_failure_branches_at_join"] = sorted({str(x) for x in at_join if x})
                 label = (
                     "cancelled or timed out"
                     if reason in ("cancelled", "timeout")

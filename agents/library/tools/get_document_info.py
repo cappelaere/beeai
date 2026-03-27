@@ -3,7 +3,7 @@ Get document info tool - Get detailed information about a specific document
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from beeai_framework.tools import StringToolOutput, tool
 from pypdf import PdfReader
@@ -78,8 +78,8 @@ def get_document_info(
             "full_path": str(pdf_path),
             "size_bytes": stat.st_size,
             "size_mb": round(stat.st_size / (1024 * 1024), 2),
-            "created_date": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-            "modified_date": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "created_date": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
+            "modified_date": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
             "page_count": page_count,
             "is_indexed": len(indexed_chunks) > 0,
             "indexed_chunks": len(indexed_chunks),

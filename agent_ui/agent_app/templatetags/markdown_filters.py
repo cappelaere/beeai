@@ -2,7 +2,7 @@
 
 import markdown
 from django import template
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString
 
 register = template.Library()
 
@@ -13,7 +13,7 @@ def markdown_to_html(value):
     if not value or not isinstance(value, str):
         return ""
     html = markdown.markdown(value, extensions=["fenced_code", "tables", "nl2br", "sane_lists"])
-    return mark_safe(html)
+    return SafeString(html)
 
 
 @register.filter

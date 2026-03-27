@@ -198,11 +198,11 @@ def _build_usa_states_figure(
     )
     fig.update_layout(
         title=title,
-        geo=dict(
-            scope="usa",
-            showlakes=True,
-            lakecolor="rgb(204, 224, 255)",
-        ),
+        geo={
+            "scope": "usa",
+            "showlakes": True,
+            "lakecolor": "rgb(204, 224, 255)",
+        },
         margin={"t": 50, "b": 20, "l": 20, "r": 20},
         height=400,
     )
@@ -229,7 +229,7 @@ def _build_country_figure(
     )
     fig.update_layout(
         title=title,
-        geo=dict(showframe=False, showcoastlines=True),
+        geo={"showframe": False, "showcoastlines": True},
         margin={"t": 50, "b": 20, "l": 20, "r": 20},
         height=400,
     )

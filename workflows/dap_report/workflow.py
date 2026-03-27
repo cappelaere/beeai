@@ -9,12 +9,25 @@ Execution is BPMN-only; see currentVersion/bpmn-bindings.yaml and the BPMN engin
 Handlers take (self, state) and read/write state.
 """
 
+import importlib.util
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 from pathlib import Path
+
+
+def _load_run_agent() -> Any:
+    """Load ``run_agent`` from ``agent_ui/agent_runner.py`` without ``import agent_ui.*`` (avoids inner/outer package name clash when ``sys.path`` includes ``agent_ui/``)."""
+    repo_root = Path(__file__).resolve().parents[2]
+    runner_path = repo_root / "agent_ui" / "agent_runner.py"
+    spec = importlib.util.spec_from_file_location("beeai_agent_runner", runner_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load agent_runner from {runner_path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.run_agent
 
 from pydantic import BaseModel, Field
 
@@ -62,7 +75,7 @@ def _get_agent(agent_id: str):
 
         async def process(self, query: str, context: Dict[str, Any]) -> Dict[str, Any]:
             try:
-                from agent_ui.agent_runner import run_agent
+                run_agent = _load_run_agent()
                 response_text, metadata = await run_agent(
                     prompt=query,
                     agent_type=self._agent_id,
@@ -92,6 +105,7 @@ class DAPReportState(BaseModel):
     trends: Optional[Dict[str, Any]] = None
     analysis_results: Optional[Dict[str, Any]] = None
     issues_found: List[Dict[str, Any]] = Field(default_factory=list)
+    has_issues: bool = Field(default=False)
 
     model_config = {"extra": "allow"}
 
@@ -159,6 +173,7 @@ class DAPReportWorkflow:
         issue_result = await self.check_and_flag_issues(context)
         state.analysis_results = self.analysis_results
         state.issues_found = self.issues_found
+        state.has_issues = bool(self.issues_found)
         return None
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:

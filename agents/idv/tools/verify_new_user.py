@@ -34,7 +34,7 @@ def _verify_new_user_sync(
     date_of_birth: str,
 ) -> str:
     """Synchronous helper function for database queries"""
-    IdentityVerification = get_identity_verification_model()
+    identity_verification_model = get_identity_verification_model()
     # Validation: Check required fields
     if not name or not city or not state or not street_address:
         response = {
@@ -82,7 +82,9 @@ def _verify_new_user_sync(
     state_hash = hashlib.sha256(state_norm.encode()).hexdigest()
 
     # Check if already exists
-    existing = IdentityVerification.objects.filter(verification_hash=verification_hash).first()
+    existing = identity_verification_model.objects.filter(
+        verification_hash=verification_hash
+    ).first()
     if existing:
         now = timezone.now()
         is_expired = now > existing.expiration_date
@@ -97,12 +99,8 @@ def _verify_new_user_sync(
         }
         return json.dumps(response, indent=2)
 
-    # Get session key from environment or context
-    try:
-        # For now, use a placeholder - in production, this would come from the request context
-        session_key = "system"
-    except:
-        session_key = "system"
+    # Placeholder until request context wiring is added.
+    session_key = "system"
 
     # Calculate expiration (1 year from now)
     now = timezone.now()
@@ -118,7 +116,7 @@ def _verify_new_user_sync(
         fields_provided.append("date_of_birth")
 
     # Create audit record
-    verification = IdentityVerification.objects.create(
+    verification = identity_verification_model.objects.create(
         verification_hash=verification_hash,
         name_hash=name_hash,
         city_hash=city_hash,

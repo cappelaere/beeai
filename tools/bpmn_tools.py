@@ -15,6 +15,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from beeai_framework.tools import StringToolOutput, tool
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 _REPO_ROOT = Path(__file__).parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -465,7 +466,7 @@ def update_workflow_bpmn(
         if not bpmn_xml.strip():
             return _json_output({"error": "Workflow has no BPMN XML"})
 
-        root = ET.fromstring(bpmn_xml)
+        root = safe_fromstring(bpmn_xml)
         target = root.find(f".//*[@id='{element_id}']")
         if target is None:
             return _json_output({"error": f"BPMN element '{element_id}' not found"})
@@ -739,7 +740,7 @@ Requirements:
             bpmn_xml = raw[start:].strip()
         task_ids = re.findall(r'<bpmn:serviceTask\s+id="([^"]+)"', bpmn_xml)
         return bpmn_xml, task_ids
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to generate BPMN")
         return _get_fallback_bpmn(workflow_id, name), ["main_step"]
 

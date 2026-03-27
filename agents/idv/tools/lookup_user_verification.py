@@ -33,7 +33,7 @@ def _lookup_user_sync(
     date_of_birth: str,
 ) -> str:
     """Synchronous helper function for database queries"""
-    IdentityVerification = get_identity_verification_model()
+    identity_verification_model = get_identity_verification_model()
     # Normalize inputs (same as verify_new_user)
     name_norm = name.strip().lower()
     city_norm = city.strip().lower()
@@ -50,7 +50,9 @@ def _lookup_user_sync(
     verification_hash = hashlib.sha256(hash_input.encode()).hexdigest()
 
     # Lookup by hash
-    verification = IdentityVerification.objects.filter(verification_hash=verification_hash).first()
+    verification = identity_verification_model.objects.filter(
+        verification_hash=verification_hash
+    ).first()
 
     if not verification:
         response = {

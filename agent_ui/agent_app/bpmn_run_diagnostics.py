@@ -15,9 +15,7 @@ _ACTIVE_BPMN_STATUSES = frozenset(
         "waiting_for_bpmn_message",
     }
 )
-_ACTIVE_OR_TERMINAL_BPMN_STATUSES = _ACTIVE_BPMN_STATUSES | frozenset(
-    {"failed", "cancelled"}
-)
+_ACTIVE_OR_TERMINAL_BPMN_STATUSES = _ACTIVE_BPMN_STATUSES | frozenset({"failed", "cancelled"})
 
 
 def failure_reason_operator_label(reason: str | None) -> str:
@@ -56,98 +54,103 @@ def _normalized_current_node_ids(progress_data: dict[str, Any]) -> list[str]:
     return [str(x) for x in cur if x is not None and str(x).strip()]
 
 
-def build_operator_timeline_lines(status: str, progress_data: dict[str, Any] | None) -> list[str]:
-    """Chronological-style narrative lines from persisted progress_data."""
-    lines: list[str] = []
-    if not progress_data:
-        if status == "completed":
-            lines.append("Run completed.")
-        return lines
-
-    pd = progress_data
-    eng = pd.get("engine_state") if isinstance(pd.get("engine_state"), dict) else {}
-    completed = list(pd.get("completed_node_ids") or [])
-    if not completed and isinstance(pd.get("state_data"), dict):
-        completed = list((pd.get("state_data") or {}).get("workflow_steps") or [])
-    cur = _normalized_current_node_ids(pd)
-
-    if completed:
-        lines.append(f"Completed nodes: {_fmt_nodes(completed)}.")
-
+def _append_status_timeline_lines(
+    lines: list[str], *, status: str, pd: dict[str, Any], eng: dict[str, Any]
+) -> None:
     if status == "waiting_for_task" and pd.get("next_step"):
         lines.append(
             f"Paused for human input; engine will resume from BPMN task “{pd.get('next_step')}”."
         )
-    elif status == "pending" and pd.get("next_step"):
+        return
+    if status == "pending" and pd.get("next_step"):
         lines.append(f"Ready to resume from BPMN task “{pd.get('next_step')}”.")
-    elif status == "waiting_for_bpmn_timer":
+        return
+    if status == "waiting_for_bpmn_timer":
         bew = eng.get("bpmn_event_wait") if isinstance(eng.get("bpmn_event_wait"), dict) else {}
         iso = bew.get("timer_deadline_iso") or bew.get("timer_deadline_ts") or "?"
         lines.append(
             f"Waiting on intermediate timer (deadline {iso}); explicit resume re-evaluates elapsed time."
         )
-    elif status == "waiting_for_bpmn_message":
+        return
+    if status == "waiting_for_bpmn_message":
         bew = eng.get("bpmn_event_wait") if isinstance(eng.get("bpmn_event_wait"), dict) else {}
         mk = bew.get("message_key") or "?"
-        lines.append(
-            f"Waiting on intermediate message {mk!r}; satisfy via run API then resume."
-        )
+        lines.append(f"Waiting on intermediate message {mk!r}; satisfy via run API then resume.")
 
+
+def _append_retry_timeline_lines(
+    lines: list[str], *, status: str, pd: dict[str, Any]
+) -> str | None:
     retry_tid = pd.get("retrying_task_id")
-    if retry_tid and status == "running":
-        attempt = pd.get("retry_attempt")
-        max_r = pd.get("bpmn_max_task_retries")
-        if attempt is not None and max_r is not None:
-            total = int(max_r) + 1
-            lines.append(
-                f"Retrying task {retry_tid!r} (failure #{attempt}, up to {total} total attempts)."
-            )
-        else:
-            lines.append(f"Retrying task {retry_tid!r} after transient failure.")
+    if not retry_tid or status != "running":
+        return None
+    attempt = pd.get("retry_attempt")
+    max_r = pd.get("bpmn_max_task_retries")
+    if attempt is not None and max_r is not None:
+        total = int(max_r) + 1
+        lines.append(
+            f"Retrying task {retry_tid!r} (failure #{attempt}, up to {total} total attempts)."
+        )
+    else:
+        lines.append(f"Retrying task {retry_tid!r} after transient failure.")
+    return str(retry_tid)
 
+
+def _append_join_wait_timeline_lines(lines: list[str], *, status: str, eng: dict[str, Any]) -> None:
     pj = eng.get("pending_joins") if isinstance(eng.get("pending_joins"), dict) else {}
-    if pj and status in _ACTIVE_OR_TERMINAL_BPMN_STATUSES:
-        parts = []
-        for jid, info in sorted(pj.items()):
-            if not isinstance(info, dict):
-                continue
-            arr = info.get("arrived_branch_ids") or []
-            exp = info.get("expected_branch_ids") or []
-            na = len(arr) if isinstance(arr, list) else 0
-            ne = len(exp) if isinstance(exp, list) else 0
-            parts.append(f"{jid} ({na}/{ne} branches arrived)")
-        if parts:
-            lines.append("Parallel join wait: " + "; ".join(parts) + ".")
+    if not pj or status not in _ACTIVE_OR_TERMINAL_BPMN_STATUSES:
+        return
+    parts = []
+    for jid, info in sorted(pj.items()):
+        if not isinstance(info, dict):
+            continue
+        arr = info.get("arrived_branch_ids") or []
+        exp = info.get("expected_branch_ids") or []
+        na = len(arr) if isinstance(arr, list) else 0
+        ne = len(exp) if isinstance(exp, list) else 0
+        parts.append(f"{jid} ({na}/{ne} branches arrived)")
+    if parts:
+        lines.append("Parallel join wait: " + "; ".join(parts) + ".")
 
+
+def _append_boundary_timeline_lines(lines: list[str], eng: dict[str, Any]) -> None:
     btrans = eng.get("boundary_transitions") or []
-    if isinstance(btrans, list) and btrans:
-        for rec in btrans:
-            if not isinstance(rec, dict):
-                continue
-            bt = str(rec.get("boundary_type") or "")
-            att = str(rec.get("attached_to_task_id") or "")
-            reason = str(rec.get("reason") or "")
-            if bt == "timer" and reason == "run_timeout_routed_to_timer_boundary":
-                lines.append(
-                    f"Run time limit reached; routed to timer-boundary path from task {att!r}."
-                )
-            elif bt == "timer":
-                lines.append(f"Deadline path triggered from task {att!r}.")
-            elif bt == "error":
-                lines.append(f"Error boundary taken from task {att!r}.")
-            else:
-                lines.append(f"Boundary event ({bt}) from task {att!r}.")
+    if not isinstance(btrans, list) or not btrans:
+        return
+    for rec in btrans:
+        if not isinstance(rec, dict):
+            continue
+        bt = str(rec.get("boundary_type") or "")
+        att = str(rec.get("attached_to_task_id") or "")
+        reason = str(rec.get("reason") or "")
+        if bt == "timer" and reason == "run_timeout_routed_to_timer_boundary":
+            lines.append(
+                f"Run time limit reached; routed to timer-boundary path from task {att!r}."
+            )
+        elif bt == "timer":
+            lines.append(f"Deadline path triggered from task {att!r}.")
+        elif bt == "error":
+            lines.append(f"Error boundary taken from task {att!r}.")
+        else:
+            lines.append(f"Boundary event ({bt}) from task {att!r}.")
 
+
+def _append_intermediate_timeline_lines(lines: list[str], eng: dict[str, Any]) -> None:
     ict = eng.get("intermediate_catch_transitions") or []
-    if isinstance(ict, list) and ict:
-        for rec in ict:
-            if not isinstance(rec, dict):
-                continue
-            eid = str(rec.get("event_id") or "")
-            ct = str(rec.get("catch_type") or "")
-            if eid and ct:
-                lines.append(f"Advanced past intermediate {ct} catch at {eid!r}.")
+    if not isinstance(ict, list) or not ict:
+        return
+    for rec in ict:
+        if not isinstance(rec, dict):
+            continue
+        eid = str(rec.get("event_id") or "")
+        ct = str(rec.get("catch_type") or "")
+        if eid and ct:
+            lines.append(f"Advanced past intermediate {ct} catch at {eid!r}.")
 
+
+def _append_subprocess_timeline_lines(
+    lines: list[str], *, status: str, eng: dict[str, Any]
+) -> None:
     spt = eng.get("subprocess_transitions") or []
     if isinstance(spt, list) and spt:
         for rec in spt:
@@ -160,27 +163,28 @@ def build_operator_timeline_lines(status: str, progress_data: dict[str, Any] | N
             if act == "entered" and sid:
                 lines.append(f"Entered subprocess {label!r} ({sid}).")
             elif act == "completed" and sid:
-                lines.append(
-                    f"Completed subprocess {label!r} ({sid}); continuing in parent scope."
-                )
-
+                lines.append(f"Completed subprocess {label!r} ({sid}); continuing in parent scope.")
     stack = eng.get("subprocess_stack") or []
-    if (
-        isinstance(stack, list)
-        and stack
-        and status in _ACTIVE_OR_TERMINAL_BPMN_STATUSES
-    ):
-        top = stack[-1] if isinstance(stack[-1], dict) else {}
-        spn = str(top.get("name") or top.get("subprocess_id") or "").strip()
-        if spn:
-            lines.append(f"Active subprocess context: {spn!r}.")
+    if not (isinstance(stack, list) and stack and status in _ACTIVE_OR_TERMINAL_BPMN_STATUSES):
+        return
+    top = stack[-1] if isinstance(stack[-1], dict) else {}
+    spn = str(top.get("name") or top.get("subprocess_id") or "").strip()
+    if spn:
+        lines.append(f"Active subprocess context: {spn!r}.")
 
-    if cur and status in _ACTIVE_OR_TERMINAL_BPMN_STATUSES:
-        if len(cur) > 1:
-            lines.append(f"Active BPMN nodes (parallel): {_fmt_nodes(cur)}.")
-        elif not retry_tid or status != "running":
-            lines.append(f"Current BPMN focus: {_fmt_nodes(cur)}.")
 
+def _append_current_focus_timeline_lines(
+    lines: list[str], *, status: str, cur: list[str], retry_tid: str | None
+) -> None:
+    if not cur or status not in _ACTIVE_OR_TERMINAL_BPMN_STATUSES:
+        return
+    if len(cur) > 1:
+        lines.append(f"Active BPMN nodes (parallel): {_fmt_nodes(cur)}.")
+    elif not retry_tid or status != "running":
+        lines.append(f"Current BPMN focus: {_fmt_nodes(cur)}.")
+
+
+def _append_terminal_timeline_lines(lines: list[str], *, status: str, pd: dict[str, Any]) -> None:
     reason = pd.get("failure_reason")
     if status == "cancelled":
         lines.append(
@@ -200,16 +204,176 @@ def build_operator_timeline_lines(status: str, progress_data: dict[str, Any] | N
         lines.append(f"Retries exhausted on node {node!r}; run stopped.")
     elif status == "failed" and reason:
         lines.append(f"{failure_reason_operator_label(reason)}.")
-
-    if status == "completed" and completed:
+    if status == "completed" and (pd.get("completed_node_ids") or []):
         lines.append("All BPMN paths for this run finished successfully.")
+
+
+def build_operator_timeline_lines(status: str, progress_data: dict[str, Any] | None) -> list[str]:
+    """Chronological-style narrative lines from persisted progress_data."""
+    lines: list[str] = []
+    if not progress_data:
+        if status == "completed":
+            lines.append("Run completed.")
+        return lines
+
+    pd = progress_data
+    eng = pd.get("engine_state") if isinstance(pd.get("engine_state"), dict) else {}
+    completed = list(pd.get("completed_node_ids") or [])
+    if not completed and isinstance(pd.get("state_data"), dict):
+        completed = list((pd.get("state_data") or {}).get("workflow_steps") or [])
+    cur = _normalized_current_node_ids(pd)
+
+    if completed:
+        lines.append(f"Completed nodes: {_fmt_nodes(completed)}.")
+    _append_status_timeline_lines(lines, status=status, pd=pd, eng=eng)
+    retry_tid = _append_retry_timeline_lines(lines, status=status, pd=pd)
+    _append_join_wait_timeline_lines(lines, status=status, eng=eng)
+    _append_boundary_timeline_lines(lines, eng)
+    _append_intermediate_timeline_lines(lines, eng)
+    _append_subprocess_timeline_lines(lines, status=status, eng=eng)
+    _append_current_focus_timeline_lines(lines, status=status, cur=cur, retry_tid=retry_tid)
+    _append_terminal_timeline_lines(lines, status=status, pd=pd)
 
     return lines
 
 
-def build_operator_diagnostics(
-    progress_data: dict[str, Any] | None, status: str
-) -> dict[str, Any]:
+def _build_retry_block(
+    out: dict[str, Any], *, status: str, pd: dict[str, Any], eng: dict[str, Any]
+) -> None:
+    if status != "running" or not pd.get("retrying_task_id"):
+        return
+    tid = pd.get("retrying_task_id")
+    att = pd.get("retry_attempt")
+    mx = pd.get("bpmn_max_task_retries")
+    lre = (
+        eng.get("last_retryable_error") if isinstance(eng.get("last_retryable_error"), dict) else {}
+    )
+    msg = lre.get("message") or lre.get("Message") or ""
+    out["retry_block"] = {
+        "task_id": tid,
+        "attempt": att,
+        "max_extra_retries": mx,
+        "last_error": str(msg) if msg else None,
+    }
+    total = (int(mx) + 1) if mx is not None else None
+    if att is not None and total:
+        out["headline"] = f"Retrying task {tid} (attempt {att} of up to {total})"
+    else:
+        out["headline"] = f"Retrying task {tid}"
+    out["primary_state_label"] = "Retrying after transient failure"
+
+
+def _build_join_block(out: dict[str, Any], *, status: str, eng: dict[str, Any]) -> dict[str, Any]:
+    pj = eng.get("pending_joins") if isinstance(eng.get("pending_joins"), dict) else {}
+    if not pj:
+        return {}
+    summaries = []
+    for jid, info in sorted(pj.items()):
+        if isinstance(info, dict):
+            arr = info.get("arrived_branch_ids") or []
+            exp = info.get("expected_branch_ids") or []
+            na = len(arr) if isinstance(arr, list) else 0
+            ne = len(exp) if isinstance(exp, list) else 0
+            summaries.append(f"{jid}: {na}/{ne} branches at join")
+    out["join_block"] = "; ".join(summaries) if summaries else None
+    if not out.get("headline") and status in {"running", "waiting_for_task"}:
+        out["headline"] = "Waiting for parallel branches at join"
+        out["primary_state_label"] = "Waiting at parallel join"
+    return pj
+
+
+def _terminal_lines_for_cancelled(pd: dict[str, Any], pj: dict[str, Any]) -> str | None:
+    tb = []
+    if pd.get("last_successful_node_id"):
+        tb.append(f"Last successful node: {pd.get('last_successful_node_id')}")
+    if pd.get("cancelled_at"):
+        tb.append(f"Cancelled at: {pd.get('cancelled_at')}")
+    cur = pd.get("current_node_ids") or []
+    if isinstance(cur, list) and cur:
+        tb.append(f"Active nodes when stopped: {_fmt_nodes(cur)}")
+    if pj:
+        tb.append(f"Open joins: {', '.join(sorted(pj.keys()))}")
+    return "\n".join(tb) if tb else None
+
+
+def _append_timeout_terminal_lines(tb: list[str], pd: dict[str, Any]) -> None:
+    if pd.get("timeout_seconds") is not None:
+        tb.append(f"Timeout limit: {pd.get('timeout_seconds')} seconds")
+    if pd.get("timed_out_at"):
+        tb.append(f"Timed out at: {pd.get('timed_out_at')}")
+
+
+def _append_retry_exhausted_terminal_lines(tb: list[str], pd: dict[str, Any]) -> None:
+    meta = pd.get("condition_failure_metadata") or {}
+    if not isinstance(meta, dict):
+        return
+    if meta.get("retry_attempts") is not None:
+        tb.append(f"Retry attempts: {meta.get('retry_attempts')}")
+    if meta.get("branch_id"):
+        tb.append(f"Branch: {meta.get('branch_id')}")
+    if meta.get("last_error"):
+        tb.append(f"Last error: {meta.get('last_error')}")
+
+
+def _terminal_lines_for_failed(
+    pd: dict[str, Any], pj: dict[str, Any], *, reason: str | None
+) -> tuple[str | None, bool]:
+    tb = []
+    if pd.get("failed_node_id"):
+        tb.append(f"Failed node: {pd.get('failed_node_id')}")
+    if pd.get("last_successful_node_id"):
+        tb.append(f"Last successful node: {pd.get('last_successful_node_id')}")
+    if reason == "timeout":
+        _append_timeout_terminal_lines(tb, pd)
+    if reason == "retry_exhausted":
+        _append_retry_exhausted_terminal_lines(tb, pd)
+    if pj:
+        tb.append(f"Open joins: {', '.join(sorted(pj.keys()))}")
+    meta = pd.get("condition_failure_metadata")
+    show_raw = (
+        isinstance(meta, dict)
+        and bool(meta)
+        and reason
+        not in (
+            "retry_exhausted",
+            "cancelled",
+            "timeout",
+        )
+    )
+    return ("\n".join(tb) if tb else None), show_raw
+
+
+def _build_terminal_block(
+    out: dict[str, Any], *, status: str, pd: dict[str, Any], pj: dict[str, Any], reason: str | None
+) -> None:
+    if status == "cancelled":
+        out["failure_reason_label"] = failure_reason_operator_label("cancelled")
+        out["headline"] = out["failure_reason_label"]
+        out["primary_state_label"] = "Cancelled"
+        out["terminal_block"] = _terminal_lines_for_cancelled(pd, pj)
+        out["parallel_context"] = _parallel_failure_blurb(pd, "cancelled")
+        return
+    if status == "failed":
+        out["failure_reason_label"] = failure_reason_operator_label(reason)
+        out["headline"] = out["failure_reason_label"]
+        out["primary_state_label"] = "Failed"
+        term_block, show_raw = _terminal_lines_for_failed(pd, pj, reason=reason)
+        out["terminal_block"] = term_block
+        out["parallel_context"] = _parallel_failure_blurb(pd, reason or "")
+        out["show_raw_metadata"] = show_raw
+        return
+    if status == "waiting_for_task" and not out.get("headline"):
+        out["headline"] = "Waiting for human task"
+        out["primary_state_label"] = "Paused for human input"
+    elif status == "running" and not out.get("headline"):
+        out["headline"] = "Run in progress"
+        out["primary_state_label"] = "Running"
+    elif status == "completed":
+        out["headline"] = "Run completed"
+        out["primary_state_label"] = "Completed"
+
+
+def build_operator_diagnostics(progress_data: dict[str, Any] | None, status: str) -> dict[str, Any]:
     """
     Structured operator summary for templates.
     Keys: headline, primary_state_label, retry_block, join_block, terminal_block,
@@ -235,100 +399,9 @@ def build_operator_diagnostics(
     pd = progress_data
     eng = pd.get("engine_state") if isinstance(pd.get("engine_state"), dict) else {}
     reason = pd.get("failure_reason")
-
-    # Retry (running)
-    if status == "running" and pd.get("retrying_task_id"):
-        tid = pd.get("retrying_task_id")
-        att = pd.get("retry_attempt")
-        mx = pd.get("bpmn_max_task_retries")
-        lre = eng.get("last_retryable_error") if isinstance(eng.get("last_retryable_error"), dict) else {}
-        msg = lre.get("message") or lre.get("Message") or ""
-        out["retry_block"] = {
-            "task_id": tid,
-            "attempt": att,
-            "max_extra_retries": mx,
-            "last_error": str(msg) if msg else None,
-        }
-        total = (int(mx) + 1) if mx is not None else None
-        if att is not None and total:
-            out["headline"] = f"Retrying task {tid} (attempt {att} of up to {total})"
-        else:
-            out["headline"] = f"Retrying task {tid}"
-        out["primary_state_label"] = "Retrying after transient failure"
-
-    # Join block
-    pj = eng.get("pending_joins") if isinstance(eng.get("pending_joins"), dict) else {}
-    if pj:
-        summaries = []
-        for jid, info in sorted(pj.items()):
-            if isinstance(info, dict):
-                arr = info.get("arrived_branch_ids") or []
-                exp = info.get("expected_branch_ids") or []
-                na = len(arr) if isinstance(arr, list) else 0
-                ne = len(exp) if isinstance(exp, list) else 0
-                summaries.append(f"{jid}: {na}/{ne} branches at join")
-        out["join_block"] = "; ".join(summaries) if summaries else None
-        if not out.get("headline") and status in {"running", "waiting_for_task"}:
-            out["headline"] = "Waiting for parallel branches at join"
-            out["primary_state_label"] = "Waiting at parallel join"
-
-    # Terminal
-    if status == "cancelled":
-        out["failure_reason_label"] = failure_reason_operator_label("cancelled")
-        out["headline"] = out["failure_reason_label"]
-        out["primary_state_label"] = "Cancelled"
-        tb = []
-        if pd.get("last_successful_node_id"):
-            tb.append(f"Last successful node: {pd.get('last_successful_node_id')}")
-        if pd.get("cancelled_at"):
-            tb.append(f"Cancelled at: {pd.get('cancelled_at')}")
-        cur = pd.get("current_node_ids") or []
-        if isinstance(cur, list) and cur:
-            tb.append(f"Active nodes when stopped: {_fmt_nodes(cur)}")
-        if pj:
-            tb.append(f"Open joins: {', '.join(sorted(pj.keys()))}")
-        out["terminal_block"] = "\n".join(tb) if tb else None
-        out["parallel_context"] = _parallel_failure_blurb(pd, "cancelled")
-    elif status == "failed":
-        out["failure_reason_label"] = failure_reason_operator_label(reason)
-        out["headline"] = out["failure_reason_label"]
-        out["primary_state_label"] = "Failed"
-        tb = []
-        if pd.get("failed_node_id"):
-            tb.append(f"Failed node: {pd.get('failed_node_id')}")
-        if pd.get("last_successful_node_id"):
-            tb.append(f"Last successful node: {pd.get('last_successful_node_id')}")
-        if reason == "timeout":
-            if pd.get("timeout_seconds") is not None:
-                tb.append(f"Timeout limit: {pd.get('timeout_seconds')} seconds")
-            if pd.get("timed_out_at"):
-                tb.append(f"Timed out at: {pd.get('timed_out_at')}")
-        if reason == "retry_exhausted":
-            meta = pd.get("condition_failure_metadata") or {}
-            if isinstance(meta, dict):
-                if meta.get("retry_attempts") is not None:
-                    tb.append(f"Retry attempts: {meta.get('retry_attempts')}")
-                if meta.get("branch_id"):
-                    tb.append(f"Branch: {meta.get('branch_id')}")
-                if meta.get("last_error"):
-                    tb.append(f"Last error: {meta.get('last_error')}")
-        if pj:
-            tb.append(f"Open joins: {', '.join(sorted(pj.keys()))}")
-        out["terminal_block"] = "\n".join(tb) if tb else None
-        out["parallel_context"] = _parallel_failure_blurb(pd, reason or "")
-        meta = pd.get("condition_failure_metadata")
-        if isinstance(meta, dict) and meta and reason not in ("retry_exhausted", "cancelled", "timeout"):
-            out["show_raw_metadata"] = True
-    elif status == "waiting_for_task":
-        if not out.get("headline"):
-            out["headline"] = "Waiting for human task"
-            out["primary_state_label"] = "Paused for human input"
-    elif status == "running" and not out.get("headline"):
-        out["headline"] = "Run in progress"
-        out["primary_state_label"] = "Running"
-    elif status == "completed":
-        out["headline"] = "Run completed"
-        out["primary_state_label"] = "Completed"
+    _build_retry_block(out, status=status, pd=pd, eng=eng)
+    pj = _build_join_block(out, status=status, eng=eng)
+    _build_terminal_block(out, status=status, pd=pd, pj=pj, reason=reason)
 
     return out
 
@@ -360,15 +433,13 @@ def is_bpmn_operator_view(
         return True
     if progress_data.get("current_node_ids"):
         return True
-    if progress_data.get("failure_reason") in (
+    return progress_data.get("failure_reason") in (
         "cancelled",
         "timeout",
         "retry_exhausted",
         "join_correlation_failed",
         "invalid_gateway",
-    ):
-        return True
-    return False
+    )
 
 
 def build_bpmn_task_run_context(
@@ -396,7 +467,11 @@ def build_bpmn_task_run_context(
             if isinstance(info, dict):
                 arr = info.get("arrived_branch_ids") or []
                 exp = info.get("expected_branch_ids") or []
-                na, ne = (len(arr), len(exp)) if isinstance(arr, list) and isinstance(exp, list) else (0, 0)
+                na, ne = (
+                    (len(arr), len(exp))
+                    if isinstance(arr, list) and isinstance(exp, list)
+                    else (0, 0)
+                )
                 parts.append(f"{jid} ({na}/{ne})")
         join_line = "Waiting at join: " + "; ".join(parts) if parts else None
 

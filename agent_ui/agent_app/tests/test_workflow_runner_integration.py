@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 from django.test import TransactionTestCase
 
+from agent_app.bpmn_engine import BpmnEngineError, _get_bindings_and_bpmn, normalize_engine_state
 from agent_app.models import WorkflowRun
+from agent_app.task_service import TaskPendingError
 from agent_app.workflow_context import normalize_bindings
 from agent_app.workflow_registry import workflow_registry
 from agent_app.workflow_runner import (
@@ -17,8 +19,6 @@ from agent_app.workflow_runner import (
     execute_workflow_run,
     resume_bpmn_after_pause,
 )
-from agent_app.bpmn_engine import BpmnEngineError, _get_bindings_and_bpmn, normalize_engine_state
-from agent_app.task_service import TaskPendingException
 
 
 def _run_id():
@@ -170,7 +170,7 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
             input_data={},
         )
         st = _PauseState()
-        exc = TaskPendingException("ht1", "human_task", st, "branch_a")
+        exc = TaskPendingError("ht1", "human_task", st, "branch_a")
         asyncio.run(_handle_workflow_paused(rid, exc, send_message=None))
         run = WorkflowRun.objects.get(run_id=rid)
         self.assertEqual(
@@ -179,7 +179,7 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
         )
 
     def test_resume_second_pause_sets_waiting_for_task(self):
-        """After resume, another TaskPendingException must not mark the run failed."""
+        """After resume, another TaskPendingError must not mark the run failed."""
         rid = _run_id()
         WorkflowRun.objects.create(
             run_id=rid,
@@ -196,7 +196,7 @@ class WorkflowRunnerIntegrationTests(TransactionTestCase):
         run.save(update_fields=["status"])
 
         async def pause_again(executor_instance, state, bpmn, bindings, **kwargs):
-            raise TaskPendingException(
+            raise TaskPendingError(
                 "second_pause_task",
                 "human",
                 state,

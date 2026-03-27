@@ -4,7 +4,7 @@ version: 1
 disable_existing_loggers: false
 formatters:
   default:
-    "()": "agent_ui.agent_ui.log_formatter.DjangoStyleFormatter"
+    "()": "agent_ui.log_formatter.DjangoStyleFormatter"
     datefmt: "%Y-%m-%d %H:%M:%S"
     use_colors: true
   access:

@@ -540,30 +540,30 @@ def _outcome_parts_failed(run) -> list:
     return [msg]
 
 
-def _build_run_outcome_parts(run, run_id: str, HumanTask, WorkflowRun) -> list:
+def _build_run_outcome_parts(run, run_id: str, human_task_model, workflow_run_model) -> list:
     """Build list of outcome description strings for a workflow run."""
     outcome_parts = []
-    if run.status == WorkflowRun.STATUS_COMPLETED and run.output_data:
+    if run.status == workflow_run_model.STATUS_COMPLETED and run.output_data:
         outcome_parts = _outcome_parts_completed(run)
-    elif run.status == WorkflowRun.STATUS_FAILED and run.error_message:
+    elif run.status == workflow_run_model.STATUS_FAILED and run.error_message:
         outcome_parts = _outcome_parts_failed(run)
-    elif run.status == WorkflowRun.STATUS_WAITING_FOR_TASK:
-        open_count = HumanTask.objects.filter(
+    elif run.status == workflow_run_model.STATUS_WAITING_FOR_TASK:
+        open_count = human_task_model.objects.filter(
             workflow_run_id=run_id,
-            status__in=[HumanTask.STATUS_OPEN, HumanTask.STATUS_IN_PROGRESS],
+            status__in=[human_task_model.STATUS_OPEN, human_task_model.STATUS_IN_PROGRESS],
         ).count()
         outcome_parts = [f"{open_count} task(s) awaiting review"]
-    elif run.status == WorkflowRun.STATUS_RUNNING:
+    elif run.status == workflow_run_model.STATUS_RUNNING:
         outcome_parts = ["Running"]
-    elif run.status == WorkflowRun.STATUS_PENDING:
+    elif run.status == workflow_run_model.STATUS_PENDING:
         outcome_parts = ["Pending (not started)"]
-    elif run.status == WorkflowRun.STATUS_CANCELLED:
+    elif run.status == workflow_run_model.STATUS_CANCELLED:
         outcome_parts = ["Cancelled"]
 
-    completed_tasks = HumanTask.objects.filter(
-        workflow_run_id=run_id, status=HumanTask.STATUS_COMPLETED
+    completed_tasks = human_task_model.objects.filter(
+        workflow_run_id=run_id, status=human_task_model.STATUS_COMPLETED
     ).count()
-    if completed_tasks and run.status == WorkflowRun.STATUS_COMPLETED:
+    if completed_tasks and run.status == workflow_run_model.STATUS_COMPLETED:
         outcome_parts.append(f"{completed_tasks} task(s) completed")
 
     return outcome_parts
