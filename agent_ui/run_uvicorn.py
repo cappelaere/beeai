@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "agent_ui.agent_ui.asgi:application",
-        host=os.environ.get("UVICORN_HOST", "0.0.0.0"),
+        host=os.environ.get("UVICORN_HOST", "127.0.0.1"),
         port=int(os.environ.get("UVICORN_PORT", "8002")),
         reload=os.environ.get("UVICORN_RELOAD", "").lower() in ("1", "true", "yes"),
         log_config=str(log_config_path) if log_config_path.exists() else None,

@@ -82,7 +82,9 @@ class Issue7ProductBpmnDiagnostic(TransactionTestCase):
         self.assertEqual(resp.status_code, 200, msg=getattr(resp, "content", b"")[:500])
         body = resp.content.decode("utf-8", errors="replace")
         self.assertTrue(
-            "workflow-diagram-bpmn" in body or "bpmn_operator_panel" in body or "BPMN diagram" in body,
+            "workflow-diagram-bpmn" in body
+            or "bpmn_operator_panel" in body
+            or "BPMN diagram" in body,
             msg="run detail should include BPMN diagram or operator panel markers",
         )
 

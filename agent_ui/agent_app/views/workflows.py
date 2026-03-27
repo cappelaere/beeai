@@ -218,10 +218,11 @@ def schedule_form(request, schedule_id=None):
 
 def workflow_edit(request, workflow_id):
     """Edit existing workflow with version control"""
+    import yaml
+
     from agent_app.version_manager import version_manager
     from agent_app.workflow_context import normalize_bindings, validate_bpmn_bindings_context
     from agent_app.workflow_registry import workflow_registry
-    import yaml
 
     # Check admin permission
     if request.session.get("user_role") != "admin":
@@ -245,14 +246,14 @@ def workflow_edit(request, workflow_id):
     for filename in files_from_root:
         file_path = workflow_path / filename
         if file_path.exists():
-            with open(file_path, encoding="utf-8") as f:
+            with file_path.open(encoding="utf-8") as f:
                 file_contents[filename] = f.read()
         else:
             file_contents[filename] = ""
     for filename in files_from_assets:
         file_path = assets_path / filename
         if file_path.exists():
-            with open(file_path, encoding="utf-8") as f:
+            with file_path.open(encoding="utf-8") as f:
                 file_contents[filename] = f.read()
         else:
             file_contents[filename] = ""
@@ -314,6 +315,7 @@ def workflow_edit(request, workflow_id):
 def workflow_diagram_editor_frame(request, workflow_id):
     """Standalone BPMN modeler page (same as bpmn-js-examples starter). Diagram loaded from diagram_xml_url. Allowed in iframe from same origin (edit page)."""
     from django.urls import reverse
+
     from agent_app.workflow_registry import workflow_registry
 
     if request.session.get("user_role") != "admin":
@@ -584,7 +586,7 @@ def workflow_documentation(request, workflow_id):
     try:
         import re
 
-        with open(doc_path, encoding="utf-8") as f:
+        with doc_path.open(encoding="utf-8") as f:
             markdown_content = f.read()
 
         # Replace the first Mermaid diagram with the corrected one from workflow_registry
@@ -861,6 +863,190 @@ def _current_node_display(current_node_ids):
     return ", ".join(parts) if parts else "—"
 
 
+def _current_node_ids_from_engine_state(engine_state):
+    if not engine_state or not isinstance(engine_state, dict):
+        return []
+    out = []
+    for t in engine_state.get("active_tokens") or []:
+        if isinstance(t, dict) and t.get("current_element_id"):
+            out.append(str(t["current_element_id"]))
+    return out
+
+
+def _extract_parallel_join_metrics(engine_state: dict, current_node_ids: list[str]) -> dict:
+    pj_raw = engine_state.get("pending_joins")
+    if not isinstance(pj_raw, dict):
+        pj_raw = {}
+    tokens = engine_state.get("active_tokens")
+    if not isinstance(tokens, list):
+        tokens = []
+
+    waiting_join_ids = sorted(str(k) for k in pj_raw)
+    active_branch_ids = sorted(
+        {str(t["branch_id"]) for t in tokens if isinstance(t, dict) and t.get("branch_id")}
+    )
+    nodes_waiting_at_join = sorted(
+        {
+            str(t.get("current_element_id"))
+            for t in tokens
+            if isinstance(t, dict) and str(t.get("current_element_id") or "") in pj_raw
+        }
+    )
+    cids = [
+        str(x)
+        for x in (current_node_ids if isinstance(current_node_ids, list) else [])
+        if str(x).strip()
+    ]
+    return {
+        "pj_raw": pj_raw,
+        "waiting_join_ids": waiting_join_ids,
+        "pending_join_count": len(waiting_join_ids),
+        "active_branch_ids": active_branch_ids,
+        "nodes_waiting_at_join": nodes_waiting_at_join,
+        "cids": cids,
+    }
+
+
+def _build_parallel_state_summary(metrics: dict) -> str | None:
+    pending_join_count = metrics["pending_join_count"]
+    waiting_join_ids = metrics["waiting_join_ids"]
+    pj_raw = metrics["pj_raw"]
+    cids = metrics["cids"]
+    if pending_join_count:
+        parts = []
+        for jid in waiting_join_ids:
+            info = pj_raw.get(jid) or {}
+            if not isinstance(info, dict):
+                info = {}
+            arr = info.get("arrived_branch_ids") or []
+            exp = info.get("expected_branch_ids") or []
+            na = len(arr) if isinstance(arr, list) else 0
+            ne = len(exp) if isinstance(exp, list) else 0
+            parts.append(f"{jid} ({na}/{ne} branches at join)")
+        return (
+            "Waiting at parallel join — "
+            + "; ".join(parts)
+            + ". Other branches must still reach the join."
+        )
+    if len(cids) > 1:
+        return f"{len(cids)} parallel branches are active; they merge at the next parallel join."
+    return None
+
+
+def _extract_subprocess_context(engine_state) -> str | None:
+    if not isinstance(engine_state, dict):
+        return None
+    stack = engine_state.get("subprocess_stack") or []
+    if not (isinstance(stack, list) and stack):
+        return None
+    frame = stack[-1] if isinstance(stack[-1], dict) else {}
+    return (frame.get("name") or frame.get("subprocess_id") or "").strip() or None
+
+
+def _normalize_current_node_ids(raw_ids) -> list[str]:
+    ids = raw_ids if isinstance(raw_ids, list) else ([raw_ids] if raw_ids else [])
+    return [str(x) for x in ids if x is not None and str(x).strip()]
+
+
+def _build_waiting_progress_info(progress_data):
+    pd = progress_data
+    state_data = pd.get("state_data", {})
+    raw_steps = state_data.get("workflow_steps", [])
+    cids = _normalize_current_node_ids(pd.get("current_node_ids"))
+    eng = pd.get("engine_state") or {}
+    jp = _compute_join_aware_progress(eng, cids)
+    bew = eng.get("bpmn_event_wait") if isinstance(eng, dict) else {}
+    if not isinstance(bew, dict):
+        bew = {}
+    return {
+        "completed_steps": [_step_id_to_name(s) for s in raw_steps],
+        "next_step": pd.get("next_step"),
+        "paused_at": pd.get("paused_at"),
+        "pending_tasks": pd.get("pending_tasks", []),
+        "completed_node_ids": pd.get("completed_node_ids", []),
+        "current_node_ids": cids,
+        "current_node_display": _current_node_display(cids),
+        "failed_node_id": pd.get("failed_node_id"),
+        "bpmn_event_wait": bew,
+        "bpmn_intermediate_wait_kind": pd.get("bpmn_intermediate_wait_kind"),
+        "subprocess_context": _extract_subprocess_context(eng),
+        **jp,
+    }
+
+
+def _build_terminal_progress_info(workflow_run):
+    pd = workflow_run.progress_data or {}
+    completed_node_ids = pd.get("completed_node_ids", [])
+    if not completed_node_ids and workflow_run.output_data:
+        completed_node_ids = workflow_run.output_data.get("workflow_steps", [])
+
+    base_done = {
+        "completed_node_ids": completed_node_ids,
+        "completed_steps": [_step_id_to_name(s) for s in completed_node_ids],
+        "failed_node_id": pd.get("failed_node_id"),
+        "failed_step_name": _step_id_to_name(pd.get("failed_node_id"))
+        if pd.get("failed_node_id")
+        else None,
+        "failure_reason": pd.get("failure_reason"),
+        "last_successful_node_id": pd.get("last_successful_node_id"),
+        "condition_failure_metadata": pd.get("condition_failure_metadata"),
+        "cancelled_at": pd.get("cancelled_at"),
+        "timeout_seconds": pd.get("timeout_seconds"),
+        "timed_out_at": pd.get("timed_out_at"),
+    }
+    if workflow_run.status == "completed":
+        base_done["current_node_ids"] = []
+        base_done["current_node_display"] = "—"
+        base_done.update(_compute_join_aware_progress({}, []))
+        return base_done
+
+    eng = pd.get("engine_state") or {}
+    cur_from_eng = _current_node_ids_from_engine_state(eng)
+    base_done["current_node_ids"] = cur_from_eng
+    base_done["current_node_display"] = _current_node_display(cur_from_eng)
+    base_done.update(_compute_join_aware_progress(eng, cur_from_eng))
+    return base_done
+
+
+def _build_running_progress_info(progress_data):
+    pd = progress_data
+    cids = _normalize_current_node_ids(pd.get("current_node_ids"))
+    eng = pd.get("engine_state") or {}
+    if not cids and eng:
+        cids = _current_node_ids_from_engine_state(eng)
+    lre = eng.get("last_retryable_error") if isinstance(eng, dict) else None
+    return {
+        "completed_node_ids": pd.get("completed_node_ids", []),
+        "completed_steps": [_step_id_to_name(s) for s in (pd.get("completed_node_ids") or [])],
+        "current_node_ids": cids,
+        "current_node_display": _current_node_display(cids),
+        "failed_node_id": None,
+        "subprocess_context": _extract_subprocess_context(eng),
+        "retrying_task_id": pd.get("retrying_task_id"),
+        "retry_attempt": pd.get("retry_attempt"),
+        "bpmn_max_task_retries": pd.get("bpmn_max_task_retries"),
+        "last_retryable_error": lre if isinstance(lre, dict) else None,
+        **_compute_join_aware_progress(eng, cids),
+    }
+
+
+def _build_progress_info(workflow_run):
+    """Extract progress info for pending/waiting/completed/failed workflows."""
+    active_wait_statuses = {
+        "pending",
+        "waiting_for_task",
+        "waiting_for_bpmn_timer",
+        "waiting_for_bpmn_message",
+    }
+    if workflow_run.status in active_wait_statuses and workflow_run.progress_data:
+        return _build_waiting_progress_info(workflow_run.progress_data)
+    if workflow_run.status in ["completed", "failed", "cancelled"]:
+        return _build_terminal_progress_info(workflow_run)
+    if workflow_run.status == "running" and workflow_run.progress_data:
+        return _build_running_progress_info(workflow_run.progress_data)
+    return None
+
+
 def _compute_join_aware_progress(engine_state, current_node_ids):
     """
     Display metadata for parallel fork/join (PAR-008). Raw BPMN ids preserved in engine_state;
@@ -877,204 +1063,25 @@ def _compute_join_aware_progress(engine_state, current_node_ids):
     if not engine_state or not isinstance(engine_state, dict):
         return base
 
-    pj_raw = engine_state.get("pending_joins")
-    if not isinstance(pj_raw, dict):
-        pj_raw = {}
-    tokens = engine_state.get("active_tokens")
-    if not isinstance(tokens, list):
-        tokens = []
-
-    waiting_join_ids = sorted(str(k) for k in pj_raw.keys())
-    pending_join_count = len(waiting_join_ids)
-
-    branch_ids_set = set()
-    for t in tokens:
-        if isinstance(t, dict) and t.get("branch_id"):
-            branch_ids_set.add(str(t["branch_id"]))
-    active_branch_ids = sorted(branch_ids_set)
-
-    nodes_waiting = []
-    for t in tokens:
-        if not isinstance(t, dict):
-            continue
-        cid = t.get("current_element_id")
-        if cid and str(cid) in pj_raw:
-            nodes_waiting.append(str(cid))
-    nodes_waiting_at_join = sorted(set(nodes_waiting))
-
-    cids = current_node_ids if isinstance(current_node_ids, list) else []
-    cids = [str(x) for x in cids if x is not None and str(x).strip()]
-    multi_ids = len(cids) > 1
-    multi_branch = len(active_branch_ids) > 1
-
+    metrics = _extract_parallel_join_metrics(engine_state, current_node_ids)
     show_parallel_panel = bool(
-        pending_join_count or multi_ids or multi_branch or nodes_waiting_at_join
+        metrics["pending_join_count"]
+        or len(metrics["cids"]) > 1
+        or len(metrics["active_branch_ids"]) > 1
+        or metrics["nodes_waiting_at_join"]
     )
-
-    parallel_state_summary = None
-    if pending_join_count:
-        parts = []
-        for jid in waiting_join_ids:
-            info = pj_raw.get(jid) or {}
-            if not isinstance(info, dict):
-                info = {}
-            arr = info.get("arrived_branch_ids") or []
-            exp = info.get("expected_branch_ids") or []
-            na = len(arr) if isinstance(arr, list) else 0
-            ne = len(exp) if isinstance(exp, list) else 0
-            parts.append(f"{jid} ({na}/{ne} branches at join)")
-        parallel_state_summary = (
-            "Waiting at parallel join — "
-            + "; ".join(parts)
-            + ". Other branches must still reach the join."
-        )
-    elif multi_ids:
-        parallel_state_summary = (
-            f"{len(cids)} parallel branches are active; they merge at the next parallel join."
-        )
-
-    if not show_parallel_panel:
-        parallel_state_summary = None
-
+    parallel_state_summary = _build_parallel_state_summary(metrics) if show_parallel_panel else None
     base.update(
         {
-            "waiting_join_ids": waiting_join_ids,
-            "pending_join_count": pending_join_count,
-            "active_branch_ids": active_branch_ids,
+            "waiting_join_ids": metrics["waiting_join_ids"],
+            "pending_join_count": metrics["pending_join_count"],
+            "active_branch_ids": metrics["active_branch_ids"],
             "parallel_state_summary": parallel_state_summary,
-            "nodes_waiting_at_join": nodes_waiting_at_join,
+            "nodes_waiting_at_join": metrics["nodes_waiting_at_join"],
             "show_parallel_panel": show_parallel_panel,
         }
     )
     return base
-
-
-def _current_node_ids_from_engine_state(engine_state):
-    if not engine_state or not isinstance(engine_state, dict):
-        return []
-    out = []
-    for t in engine_state.get("active_tokens") or []:
-        if isinstance(t, dict) and t.get("current_element_id"):
-            out.append(str(t["current_element_id"]))
-    return out
-
-
-def _build_progress_info(workflow_run):
-    """Extract progress info for pending/waiting/completed/failed workflows."""
-    if workflow_run.status in [
-        "pending",
-        "waiting_for_task",
-        "waiting_for_bpmn_timer",
-        "waiting_for_bpmn_message",
-    ] and workflow_run.progress_data:
-        pd = workflow_run.progress_data
-        state_data = pd.get("state_data", {})
-        raw_steps = state_data.get("workflow_steps", [])
-        cids = pd.get("current_node_ids") or []
-        if not isinstance(cids, list):
-            cids = [cids] if cids else []
-        cids = [str(x) for x in cids if x is not None and str(x).strip()]
-        eng = pd.get("engine_state") or {}
-        jp = _compute_join_aware_progress(eng, cids)
-        bew = eng.get("bpmn_event_wait") if isinstance(eng, dict) else {}
-        if not isinstance(bew, dict):
-            bew = {}
-        sp_ctx = None
-        if isinstance(eng, dict):
-            st = eng.get("subprocess_stack") or []
-            if isinstance(st, list) and st:
-                fr = st[-1] if isinstance(st[-1], dict) else {}
-                sp_ctx = (fr.get("name") or fr.get("subprocess_id") or "").strip() or None
-        return {
-            "completed_steps": [_step_id_to_name(s) for s in raw_steps],
-            "next_step": pd.get("next_step"),
-            "paused_at": pd.get("paused_at"),
-            "pending_tasks": pd.get("pending_tasks", []),
-            "completed_node_ids": pd.get("completed_node_ids", []),
-            "current_node_ids": cids,
-            "current_node_display": _current_node_display(cids),
-            "failed_node_id": pd.get("failed_node_id"),
-            "bpmn_event_wait": bew,
-            "bpmn_intermediate_wait_kind": pd.get("bpmn_intermediate_wait_kind"),
-            "subprocess_context": sp_ctx,
-            **jp,
-        }
-    if workflow_run.status in ["completed", "failed", "cancelled"]:
-        completed_node_ids = []
-        failed_node_id = None
-        failure_reason = None
-        last_successful_node_id = None
-        condition_failure_metadata = None
-        cancelled_at = None
-        timeout_seconds = None
-        timed_out_at = None
-        if workflow_run.progress_data:
-            pd = workflow_run.progress_data
-            completed_node_ids = pd.get("completed_node_ids", [])
-            failed_node_id = pd.get("failed_node_id")
-            failure_reason = pd.get("failure_reason")
-            last_successful_node_id = pd.get("last_successful_node_id")
-            condition_failure_metadata = pd.get("condition_failure_metadata")
-            cancelled_at = pd.get("cancelled_at")
-            timeout_seconds = pd.get("timeout_seconds")
-            timed_out_at = pd.get("timed_out_at")
-        if not completed_node_ids and workflow_run.output_data:
-            completed_node_ids = workflow_run.output_data.get("workflow_steps", [])
-        base_done = {
-            "completed_node_ids": completed_node_ids,
-            "completed_steps": [_step_id_to_name(s) for s in completed_node_ids],
-            "failed_node_id": failed_node_id,
-            "failed_step_name": _step_id_to_name(failed_node_id) if failed_node_id else None,
-            "failure_reason": failure_reason,
-            "last_successful_node_id": last_successful_node_id,
-            "condition_failure_metadata": condition_failure_metadata,
-            "cancelled_at": cancelled_at,
-            "timeout_seconds": timeout_seconds,
-            "timed_out_at": timed_out_at,
-        }
-        if workflow_run.status == "completed":
-            base_done["current_node_ids"] = []
-            base_done["current_node_display"] = "—"
-            base_done.update(_compute_join_aware_progress({}, []))
-            return base_done
-        eng = (workflow_run.progress_data or {}).get("engine_state") or {}
-        cur_from_eng = _current_node_ids_from_engine_state(eng)
-        jp = _compute_join_aware_progress(eng, cur_from_eng)
-        base_done["current_node_ids"] = cur_from_eng
-        base_done["current_node_display"] = _current_node_display(cur_from_eng)
-        base_done.update(jp)
-        return base_done
-    if workflow_run.status == "running" and workflow_run.progress_data:
-        pd = workflow_run.progress_data
-        cids = pd.get("current_node_ids") or []
-        if not isinstance(cids, list):
-            cids = [cids] if cids else []
-        cids = [str(x) for x in cids if x is not None and str(x).strip()]
-        eng = pd.get("engine_state") or {}
-        if not cids and eng:
-            cids = _current_node_ids_from_engine_state(eng)
-        jp = _compute_join_aware_progress(eng, cids)
-        lre = eng.get("last_retryable_error") if isinstance(eng, dict) else None
-        sp_ctx = None
-        if isinstance(eng, dict):
-            st = eng.get("subprocess_stack") or []
-            if isinstance(st, list) and st:
-                fr = st[-1] if isinstance(st[-1], dict) else {}
-                sp_ctx = (fr.get("name") or fr.get("subprocess_id") or "").strip() or None
-        return {
-            "completed_node_ids": pd.get("completed_node_ids", []),
-            "completed_steps": [_step_id_to_name(s) for s in (pd.get("completed_node_ids") or [])],
-            "current_node_ids": cids,
-            "current_node_display": _current_node_display(cids),
-            "failed_node_id": None,
-            "subprocess_context": sp_ctx,
-            "retrying_task_id": pd.get("retrying_task_id"),
-            "retry_attempt": pd.get("retry_attempt"),
-            "bpmn_max_task_retries": pd.get("bpmn_max_task_retries"),
-            "last_retryable_error": lre if isinstance(lre, dict) else None,
-            **jp,
-        }
-    return None
 
 
 def _build_tasks_json(workflow_run):
@@ -1243,7 +1250,6 @@ def workflow_run_delete(request, run_id):
 @require_http_methods(["POST"])
 def workflow_runs_bulk_delete(request):
     """Delete multiple workflow runs. Expects run_ids in POST."""
-    from django.http import HttpResponseForbidden
     from django.utils import timezone
 
     from agent_app.models import WorkflowRun
@@ -1270,6 +1276,36 @@ def workflow_runs_bulk_delete(request):
     return redirect("workflow_runs_list")
 
 
+def _extract_satisfied_message_key(request):
+    sk = None
+    ct = (request.content_type or "").lower()
+    if request.body and "application/json" in ct:
+        try:
+            body = json.loads(request.body.decode() or "{}")
+            sk = body.get("satisfy_intermediate_message")
+        except json.JSONDecodeError:
+            pass
+    if not sk and request.POST:
+        sk = request.POST.get("satisfy_intermediate_message")
+    return sk
+
+
+def _update_satisfied_intermediate_message(workflow_run, message_key: str):
+    from agent_app.bpmn_engine import normalize_engine_state
+
+    pd = dict(workflow_run.progress_data or {})
+    eng = normalize_engine_state(pd.get("engine_state"))
+    acc = list(eng.get("satisfied_intermediate_messages") or [])
+    s = str(message_key).strip()
+    if s and s not in acc:
+        acc.append(s)
+    eng["satisfied_intermediate_messages"] = acc
+    pd["engine_state"] = eng
+    workflow_run.progress_data = pd
+    workflow_run.save(update_fields=["progress_data"])
+    workflow_run.refresh_from_db()
+
+
 @require_http_methods(["GET", "POST"])
 def workflow_run_resume_bpmn(request, run_id):
     """
@@ -1280,7 +1316,6 @@ def workflow_run_resume_bpmn(request, run_id):
 
     from django.utils import timezone
 
-    from agent_app.bpmn_engine import normalize_engine_state
     from agent_app.models import WorkflowRun
     from agent_app.workflow_runner import resume_bpmn_after_pause
 
@@ -1301,35 +1336,14 @@ def workflow_run_resume_bpmn(request, run_id):
     if workflow_run.status not in allowed:
         if request.method == "GET":
             return redirect("workflow_run_detail", run_id=run_id)
-        return JsonResponse(
-            {"error": "Run is not waiting on BPMN timer or message."}, status=400
-        )
+        return JsonResponse({"error": "Run is not waiting on BPMN timer or message."}, status=400)
 
     if request.method == "GET":
         return redirect("workflow_run_detail", run_id=run_id)
 
-    sk = None
-    ct = (request.content_type or "").lower()
-    if request.body and "application/json" in ct:
-        try:
-            body = json.loads(request.body.decode() or "{}")
-            sk = body.get("satisfy_intermediate_message")
-        except json.JSONDecodeError:
-            pass
-    if not sk and request.POST:
-        sk = request.POST.get("satisfy_intermediate_message")
+    sk = _extract_satisfied_message_key(request)
     if sk:
-        pd = dict(workflow_run.progress_data or {})
-        eng = normalize_engine_state(pd.get("engine_state"))
-        acc = list(eng.get("satisfied_intermediate_messages") or [])
-        s = str(sk).strip()
-        if s and s not in acc:
-            acc.append(s)
-        eng["satisfied_intermediate_messages"] = acc
-        pd["engine_state"] = eng
-        workflow_run.progress_data = pd
-        workflow_run.save(update_fields=["progress_data"])
-        workflow_run.refresh_from_db()
+        _update_satisfied_intermediate_message(workflow_run, sk)
 
     workflow_run.status = WorkflowRun.STATUS_RUNNING
     workflow_run.started_at = timezone.now()

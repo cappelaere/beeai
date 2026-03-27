@@ -15,7 +15,7 @@ def _format_doc_size(total_doc_size):
 def _get_database_size():
     """Get database size in human-readable format."""
     import logging
-    import os
+    from pathlib import Path
 
     from django.db import connection
 
@@ -25,8 +25,9 @@ def _get_database_size():
         db_engine = connection.settings_dict["ENGINE"]
         if "sqlite" in db_engine.lower():
             db_path = connection.settings_dict.get("NAME")
-            if db_path and db_path != ":memory:" and os.path.exists(db_path):
-                size_bytes = os.path.getsize(db_path)
+            db_file = Path(db_path) if db_path and db_path != ":memory:" else None
+            if db_file and db_file.exists():
+                size_bytes = db_file.stat().st_size
                 if size_bytes < 1024:
                     db_size = f"{size_bytes} B"
                 elif size_bytes < 1024 * 1024:

@@ -10,7 +10,9 @@ for metadata.yaml files.
 
 import logging
 import re
+import sqlite3
 import sys
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,17 @@ VERSION_SUBFOLDER_PATTERN = re.compile(r"^v(\d+)$")
 CURRENT_VERSION_FOLDER = "currentVersion"
 
 logger = logging.getLogger(__name__)
+
+
+def _is_sqlite_lock_error(exc: BaseException) -> bool:
+    """True if exc or its chain is a SQLite busy/locked error (wording varies by layer)."""
+    e: BaseException | None = exc
+    while e is not None:
+        msg = str(e).lower()
+        if "locked" in msg or "busy" in msg:
+            return True
+        e = e.__cause__ or e.__context__
+    return False
 
 
 def _resolve_repo_root() -> Path:
@@ -209,7 +222,7 @@ class WorkflowRegistry:
                 continue
 
             try:
-                with open(metadata_file) as f:
+                with metadata_file.open() as f:
                     metadata_dict = yaml.safe_load(f)
 
                 # Assign a unique workflow_number: prefer value from metadata, else next_number
@@ -280,14 +293,8 @@ class WorkflowRegistry:
         """Upsert discovered workflows into the Workflow model (enforces unique workflow_id and workflow_number).
         Must not be called from module import; use connection_created (apps.py) or reload() instead."""
         try:
-            import asyncio
-
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                logger.debug("Async context detected, skipping Workflow model sync")
-            else:
-                # Called from async context (e.g. ASGI); skip DB sync to avoid "cannot call from async context"
+            if self._in_async_context():
+                # Called from async context (e.g. ASGI); skip DB sync to avoid sync-DB calls in async scope.
                 logger.debug(
                     "Skipping Workflow model sync in async context (will sync on next sync reload)"
                 )
@@ -296,21 +303,46 @@ class WorkflowRegistry:
 
             if not apps.is_installed("agent_app"):
                 return
+            from django.db.utils import OperationalError
+
             from agent_app.models import Workflow
 
-            seen_ids = set()
-            for w in self.workflows.values():
-                meta = w["metadata"]
-                seen_ids.add(meta.id)
-                Workflow.objects.update_or_create(
-                    workflow_id=meta.id,
-                    defaults={"workflow_number": meta.workflow_number, "name": meta.name},
-                )
-            # Remove rows for workflows no longer on the filesystem
-            Workflow.objects.exclude(workflow_id__in=seen_ids).delete()
+            self._sync_workflows_with_retry(Workflow, OperationalError)
         except Exception as e:
             logger.warning(
                 "Could not sync workflow registry to Workflow model: %s", e, exc_info=True
+            )
+
+    def _in_async_context(self) -> bool:
+        import asyncio
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        return True
+
+    def _sync_workflows_with_retry(
+        self, workflow_model: Any, db_operational_error: type[Exception]
+    ) -> None:
+        seen_ids = {w["metadata"].id for w in self.workflows.values()}
+        max_attempts = 15  # Uvicorn reload / iCloud / multi-tab can hold SQLite locks briefly.
+        for attempt in range(max_attempts):
+            try:
+                self._upsert_workflow_rows(workflow_model)
+                workflow_model.objects.exclude(workflow_id__in=seen_ids).delete()
+                return
+            except (db_operational_error, sqlite3.OperationalError) as e:
+                if not _is_sqlite_lock_error(e) or attempt == max_attempts - 1:
+                    raise
+                time.sleep(min(1.5, 0.05 * (2**attempt)))
+
+    def _upsert_workflow_rows(self, workflow_model: Any) -> None:
+        for workflow in self.workflows.values():
+            meta = workflow["metadata"]
+            workflow_model.objects.update_or_create(
+                workflow_id=meta.id,
+                defaults={"workflow_number": meta.workflow_number, "name": meta.name},
             )
 
 
@@ -336,7 +368,7 @@ def _validate_metadata_file(workflow_id, metadata_file, results):
         return None
 
     try:
-        with open(metadata_file) as f:
+        with metadata_file.open() as f:
             metadata = yaml.safe_load(f)
 
         required_fields = ["id", "name", "description"]

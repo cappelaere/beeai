@@ -294,7 +294,7 @@ test-e2e:
 		exit 1; \
 	fi
 	@echo "⚠️  Make sure dev server is running on port 8002"
-	@cd tests && npm run test:e2e
+	@cd tests && env -u CI npm run test:e2e
 	@echo "✅ E2E tests complete"
 
 test-api:

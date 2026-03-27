@@ -52,10 +52,9 @@ def section_508_settings(request):
     if user_id:
         try:
             pref = UserPreference.objects.filter(user_id=user_id).first()
-            if pref:
+            if pref and pref.section_508_enabled is not None:
                 # Use user preference if explicitly set, otherwise use default
-                if pref.section_508_enabled is not None:
-                    section_508_enabled = pref.section_508_enabled
+                section_508_enabled = pref.section_508_enabled
         except Exception as e:
             logger.debug("Could not load Section 508 preference for user %s: %s", user_id, e)
 

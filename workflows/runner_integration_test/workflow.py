@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_app.task_service import BpmnRetryableTaskError, TaskPendingException
+from agent_app.task_service import BpmnRetryableTaskError, TaskPendingError
 
 
 class RunnerIntegrationTestState(BaseModel):
@@ -21,7 +21,7 @@ class RunnerIntegrationTestWorkflow:
     async def task_a(self, state: RunnerIntegrationTestState) -> None:
         if state.retry_resume_test:
             return None
-        raise TaskPendingException("hitask1", "human_task", state, "task_b")
+        raise TaskPendingError("hitask1", "human_task", state, "task_b")
 
     async def task_b(self, state: RunnerIntegrationTestState) -> None:
         if state.retry_resume_test:
@@ -31,6 +31,6 @@ class RunnerIntegrationTestWorkflow:
                 raise BpmnRetryableTaskError("transient_b")
             if n == 1:
                 state.task_b_rr_invocations = 2
-                raise TaskPendingException("hitask_rr", "human_task", state, "task_b")
+                raise TaskPendingError("hitask_rr", "human_task", state, "task_b")
             return None
         return None

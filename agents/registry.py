@@ -3,9 +3,9 @@ Agent Registry - Single Source of Truth
 Loads agent metadata from agents.yaml and provides helper functions
 """
 
+import importlib
 import os
 import tempfile
-import importlib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -24,37 +24,25 @@ def write_registry_yaml(data: dict[str, Any], registry_path: Path) -> None:
     """
     registry_path = Path(registry_path)
     dir_path = registry_path.parent
-    fd = None
     tmp_path = None
     try:
-        fd = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".tmp",
             prefix=registry_path.name + ".",
             dir=dir_path,
             delete=False,
-        )
-        tmp_path = Path(fd.name)
-        yaml.dump(data, fd, default_flow_style=False, sort_keys=False)
-        fd.flush()
-        if hasattr(os, "fdatasync"):
-            os.fdatasync(fd.fileno())
-        fd.close()
-        fd = None
-        os.replace(tmp_path, registry_path)
+        ) as fd:
+            tmp_path = Path(fd.name)
+            yaml.dump(data, fd, default_flow_style=False, sort_keys=False)
+            fd.flush()
+            if hasattr(os, "fdatasync"):
+                os.fdatasync(fd.fileno())
+        tmp_path.replace(registry_path)
         tmp_path = None
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
-        if fd is not None:
-            try:
-                fd.close()
-            except Exception:
-                pass
-            try:
-                Path(fd.name).unlink(missing_ok=True)
-            except Exception:
-                pass
 
 
 def get_registry_path() -> Path:
@@ -79,7 +67,7 @@ def load_agents_registry() -> dict[str, dict[str, Any]]:
     if not _REGISTRY_FILE.exists():
         raise FileNotFoundError(f"Agent registry not found: {_REGISTRY_FILE}")
 
-    with open(_REGISTRY_FILE) as f:
+    with _REGISTRY_FILE.open() as f:
         data = yaml.safe_load(f)
 
     if not data or "agents" not in data:
@@ -147,9 +135,11 @@ def get_agent_config(agent_id: str):
         config = getattr(module, config_name)
         return config
     except ImportError as e:
-        raise ImportError(f"Failed to import agent module '{module_path}': {e}")
+        raise ImportError(f"Failed to import agent module '{module_path}': {e}") from e
     except AttributeError as e:
-        raise AttributeError(f"Config '{config_name}' not found in module '{module_path}': {e}")
+        raise AttributeError(
+            f"Config '{config_name}' not found in module '{module_path}': {e}"
+        ) from e
 
 
 def get_default_agent_id() -> str:
@@ -326,7 +316,7 @@ def _remove_orphaned_agents(agents_to_remove, results):
 
     logger = logging.getLogger(__name__)
 
-    with open(_REGISTRY_FILE) as f:
+    with _REGISTRY_FILE.open() as f:
         data = yaml.safe_load(f)
 
     for agent_id in agents_to_remove:
@@ -335,7 +325,7 @@ def _remove_orphaned_agents(agents_to_remove, results):
             results["fixed"] += 1
             logger.warning(f"Removed orphaned agent entry: {agent_id}")
 
-    with open(_REGISTRY_FILE, "w") as f:
+    with _REGISTRY_FILE.open("w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     load_agents_registry.cache_clear()

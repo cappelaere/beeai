@@ -186,6 +186,26 @@ _BPMN_EXPERT_TOOLS_STATIC = [
 ]
 
 
+_STATIC_AGENT_TOOLS = {
+    "sam": _SAM_TOOLS_STATIC,
+    "idv": _IDV_TOOLS_STATIC,
+    "library": _LIBRARY_TOOLS_STATIC,
+    "508": _508_TOOLS_STATIC,
+    "ofac": _OFAC_TOOLS_STATIC,
+    "bidder_verification": _BIDDER_VERIFICATION_TOOLS_STATIC,
+    "bpmn_expert": _BPMN_EXPERT_TOOLS_STATIC,
+}
+
+
+def _tool_callable_descriptions(tools_to_list) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    for tool_fn in tools_to_list:
+        name = getattr(tool_fn, "name", None) or getattr(tool_fn, "__name__", "unknown")
+        desc = (getattr(tool_fn, "description", None) or "").strip() or "(No description)"
+        result.append((name, desc))
+    return result
+
+
 def get_tools_list(agent_type: str = None) -> list[tuple[str, str]]:
     """
     Return a list of (tool_name, description) for available tools.
@@ -197,62 +217,15 @@ def get_tools_list(agent_type: str = None) -> list[tuple[str, str]]:
 
     Uses the tool's .name and .description (set by the @tool decorator).
     """
-    result = []
-
-    # SAM agent - use static definitions to avoid complex imports
-    # SAM agent does NOT include RAG tools (those are GRES-specific)
-    if agent_type == "sam":
-        # Add only SAM-specific tools
-        result.extend(_SAM_TOOLS_STATIC)
-        return result
-
-    # IdV agent - use static definitions
-    if agent_type == "idv":
-        # Add only IdV-specific tools
-        result.extend(_IDV_TOOLS_STATIC)
-        return result
-
-    # Library agent - use static definitions
-    if agent_type == "library":
-        # Add only Library-specific tools
-        result.extend(_LIBRARY_TOOLS_STATIC)
-        return result
-
-    # Section 508 agent - use static definitions
-    if agent_type == "508":
-        # Add only Section 508-specific tools
-        result.extend(_508_TOOLS_STATIC)
-        return result
-
-    # OFAC agent - use static definitions
-    if agent_type == "ofac":
-        # Add only OFAC-specific tools
-        result.extend(_OFAC_TOOLS_STATIC)
-        return result
-
-    # Bidder Verification agent - use static definitions
-    if agent_type == "bidder_verification":
-        # Add only Bidder Verification orchestration tools
-        result.extend(_BIDDER_VERIFICATION_TOOLS_STATIC)
-        return result
-
-    if agent_type == "bpmn_expert":
-        result.extend(_BPMN_EXPERT_TOOLS_STATIC)
-        return result
+    static_tools = _STATIC_AGENT_TOOLS.get(agent_type or "")
+    if static_tools is not None:
+        return list(static_tools)
 
     # GRES agent or no agent specified
     if agent_type == "gres" or not agent_type:
         tools_to_list = _AGENT_TOOLS.get("gres", _ALL_TOOL_FUNCTIONS)
-
-        # Extract tool info
-        for t in tools_to_list:
-            name = getattr(t, "name", None) or getattr(t, "__name__", "unknown")
-            desc = (getattr(t, "description", None) or "").strip()
-            if not desc:
-                desc = "(No description)"
-            result.append((name, desc))
-
-    return result
+        return _tool_callable_descriptions(tools_to_list)
+    return []
 
 
 @tool

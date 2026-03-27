@@ -3,7 +3,6 @@ Agent registry service: business logic for agent admin operations.
 Uses atomic registry writes and raises domain exceptions for views to map to HTTP.
 """
 
-import json
 import logging
 import re
 import shutil
@@ -29,7 +28,7 @@ def _load_full_registry() -> tuple[dict, Path]:
     path = get_registry_path()
     if not path.exists():
         raise FileNotFoundError(f"Agent registry not found: {path}")
-    with open(path) as f:
+    with path.open() as f:
         data = yaml.safe_load(f)
     if not data:
         data = {"agents": {}}

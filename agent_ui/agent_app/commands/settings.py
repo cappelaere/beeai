@@ -37,9 +37,9 @@ def _handle_settings_agent(value, pref):
     import sys
     from pathlib import Path
 
-    _AGENT_UI_DIR = Path(__file__).resolve().parent.parent.parent
-    if str(_AGENT_UI_DIR) not in sys.path:
-        sys.path.insert(0, str(_AGENT_UI_DIR))
+    agent_ui_dir = Path(__file__).resolve().parent.parent.parent
+    if str(agent_ui_dir) not in sys.path:
+        sys.path.insert(0, str(agent_ui_dir))
 
     from agent_runner import AVAILABLE_AGENTS
 

@@ -75,9 +75,7 @@ class TimelineTests(SimpleTestCase):
     def test_intermediate_catch_transition_line(self):
         pd = {
             "engine_state": {
-                "intermediate_catch_transitions": [
-                    {"event_id": "c1", "catch_type": "timer"}
-                ]
+                "intermediate_catch_transitions": [{"event_id": "c1", "catch_type": "timer"}]
             }
         }
         lines = build_operator_timeline_lines("completed", pd)

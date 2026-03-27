@@ -29,7 +29,7 @@ class DjangoStyleFormatter(logging.Formatter):
         super().__init__(fmt=fmt, datefmt=datefmt)
         self.use_colors = use_colors and sys.stderr.isatty()
 
-    def formatMessage(self, record: logging.LogRecord) -> str:
+    def formatMessage(self, record: logging.LogRecord) -> str:  # noqa: N802
         recordcopy = copy(record)
         levelname = recordcopy.levelname
         if self.use_colors:

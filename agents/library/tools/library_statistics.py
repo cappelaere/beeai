@@ -5,7 +5,7 @@ Library statistics tool - Get overall library and index statistics
 import contextlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,9 @@ def library_statistics() -> StringToolOutput:
         try:
             index_stat = FAISS_INDEX_FILE.stat()
             index_size_mb = round(index_stat.st_size / (1024 * 1024), 2)
-            index_last_modified = datetime.fromtimestamp(index_stat.st_mtime).isoformat()
+            index_last_modified = datetime.fromtimestamp(
+                index_stat.st_mtime, tz=timezone.utc
+            ).isoformat()
         except Exception as e:
             logger.debug("Could not get index file stats: %s", e)
 

@@ -1,7 +1,8 @@
 import os
 
-import requests
 from beeai_framework.tools import StringToolOutput, tool
+
+from tools._auction_api import post_json_with_retry
 
 API_BASE = os.environ["API_URL"].rstrip("/")
 AUTH_TOKEN = os.environ["AUTH_TOKEN"]
@@ -9,16 +10,11 @@ DEFAULT_SITE_ID = int(os.getenv("SITE_ID", "3"))
 DEFAULT_USER_ID = os.getenv("USER_ID")
 TLS_VERIFY = os.getenv("TLS_VERIFY", "true").lower() in ("1", "true", "yes")
 
-session = requests.Session()
-session.headers.update(
-    {
-        "Authorization": f"Token {AUTH_TOKEN}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-)
-
 PAGE_SIZE_CAP = 50
+
+
+def _is_inactive_user_error(data: dict) -> bool:
+    return str(data.get("code")) == "3" and "active user" in str(data.get("msg", "")).lower()
 
 
 @tool
@@ -46,9 +42,25 @@ def auction_total_bids(
         "page_size": page_size,
     }
     url = f"{API_BASE}/api-bid/auction-total-bids/"
-    r = session.post(url, json=payload, timeout=30, verify=TLS_VERIFY)
-    r.raise_for_status()
-    data = r.json()
+    data = post_json_with_retry(
+        url=url,
+        payload=payload,
+        auth_token=AUTH_TOKEN,
+        tls_verify=TLS_VERIFY,
+    )
     if data.get("error") not in (0, "0", None):
+        if _is_inactive_user_error(data):
+            return StringToolOutput(
+                str(
+                    {
+                        "error": "inactive_user",
+                        "message": "API rejected user_id as inactive.",
+                        "hint": "Use an active USER_ID in .env or pass user_id explicitly when calling the tool.",
+                        "user_id": uid,
+                        "site_id": site_id,
+                        "property_id": property_id,
+                    }
+                )
+            )
         raise ValueError(f"API error: {data}")
     return StringToolOutput(str(data.get("data") or {}))

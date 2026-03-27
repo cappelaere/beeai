@@ -3,7 +3,7 @@ List documents tool - List all PDF documents in the library
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from beeai_framework.tools import StringToolOutput, tool
 
@@ -52,8 +52,12 @@ def list_documents(
                     "relative_path": str(rel_path),
                     "size_bytes": stat.st_size,
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
-                    "modified_date": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    "created_date": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    "modified_date": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                    "created_date": datetime.fromtimestamp(
+                        stat.st_ctime, tz=timezone.utc
+                    ).isoformat(),
                 }
             )
         except Exception as e:

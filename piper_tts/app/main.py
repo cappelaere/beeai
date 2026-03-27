@@ -8,8 +8,8 @@ from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import config
-from app.models import (
+from .config import config
+from .models import (
     HealthResponse,
     VoicesResponse,
     SynthesizeRequest,
@@ -18,8 +18,8 @@ from app.models import (
     ErrorDetail,
     ReturnMode
 )
-from app.tts_engine import get_engine
-from app.audio_cache import get_cache
+from .tts_engine import get_engine
+from .audio_cache import get_cache
 
 # Configure logging
 logging.basicConfig(

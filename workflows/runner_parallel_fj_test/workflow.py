@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from agent_app.task_service import TaskPendingException
+from agent_app.task_service import TaskPendingError
 
 
 class RunnerParallelFjState(BaseModel):
@@ -27,7 +27,7 @@ class RunnerParallelFjTestWorkflow:
         if state.fail_branch_b:
             raise RuntimeError("branch_b_failed")
         if state.pause_on_task_b:
-            raise TaskPendingException("pause_b", "human_task", state, "taskB")
+            raise TaskPendingError("pause_b", "human_task", state, "taskB")
         state.workflow_steps.append("taskB")
 
     async def task_after(self, state: RunnerParallelFjState) -> None:

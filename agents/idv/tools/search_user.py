@@ -25,7 +25,7 @@ from ._django_ready import get_identity_verification_model
 
 def _search_user_sync(name: str, city: str, state: str) -> str:
     """Synchronous helper function for database queries"""
-    IdentityVerification = get_identity_verification_model()
+    identity_verification_model = get_identity_verification_model()
     # Require at least one search field
     if not any([name, city, state]):
         return json.dumps(
@@ -42,7 +42,7 @@ def _search_user_sync(name: str, city: str, state: str) -> str:
     state_norm = state.strip().upper() if state else None
 
     # Build query using field hashes
-    query = IdentityVerification.objects.all()
+    query = identity_verification_model.objects.all()
 
     if name_norm:
         name_hash = hashlib.sha256(name_norm.encode()).hexdigest()

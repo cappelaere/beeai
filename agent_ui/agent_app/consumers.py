@@ -10,8 +10,8 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 
-from agent_app.constants import ANONYMOUS_USER_ID
 from agent_app.bpmn_engine import can_run_with_bpmn_engine
+from agent_app.constants import ANONYMOUS_USER_ID
 from agent_app.task_service import get_completed_tasks, get_pending_tasks
 from agent_app.workflow_runner import execute_workflow_run, resume_bpmn_after_pause
 
@@ -44,101 +44,35 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
 
         logger.info(f"WebSocket connected for run_id: {self.run_id}, user_id: {self.user_id}")
 
-        # Check if workflow run exists
         workflow_run = await self.get_workflow_run(self.run_id)
+        if await self._reject_invalid_connect(workflow_run):
+            return
+        await self._handle_connect_by_status(workflow_run)
 
+    async def _reject_invalid_connect(self, workflow_run) -> bool:
         if not workflow_run:
             await self.send_json(
                 {"type": "error", "message": f"Workflow run {self.run_id} not found"}
             )
             await self.close()
-            return
-
-        # Check if user has access to this workflow run
+            return True
         if workflow_run.user_id != self.user_id:
             await self.send_json(
                 {"type": "error", "message": "Unauthorized access to workflow run"}
             )
             await self.close()
-            return
+            return True
+        return False
 
-        # If workflow is pending, start execution (or resume if progress_data exists)
-        if workflow_run.status == "pending":
-            logger.info(
-                f"Workflow {workflow_run.run_id} is pending, has_progress_data={bool(workflow_run.progress_data)}"
-            )
-            if workflow_run.progress_data:
-                # This is a resumed workflow after task completion
-                logger.info(f"Resuming workflow {workflow_run.run_id} from saved state")
-                await self.send_json(
-                    {
-                        "type": "status",
-                        "status": "resuming",
-                        "message": "Task completed, resuming workflow",
-                    }
-                )
-                await self.resume_workflow_execution(workflow_run)
-            else:
-                # Normal new execution
-                await self.start_workflow_execution(workflow_run)
-        elif workflow_run.status in (
-            "waiting_for_bpmn_timer",
-            "waiting_for_bpmn_message",
-        ):
-            pd = workflow_run.progress_data or {}
-            eng = pd.get("engine_state") or {}
-            bew = eng.get("bpmn_event_wait") if isinstance(eng.get("bpmn_event_wait"), dict) else {}
-            await self.send_json(
-                {
-                    "type": "waiting_bpmn_event",
-                    "wait_kind": pd.get("bpmn_intermediate_wait_kind")
-                    or ("timer" if workflow_run.status == "waiting_for_bpmn_timer" else "message"),
-                    "next_step": pd.get("next_step"),
-                    "bpmn_event_wait": bew,
-                    "message": (
-                        "Waiting for BPMN timer; use Resume on the run page when ready."
-                        if workflow_run.status == "waiting_for_bpmn_timer"
-                        else "Waiting for BPMN message; satisfy message then resume."
-                    ),
-                }
-            )
-        elif workflow_run.status == "waiting_for_task":
-            # Workflow is waiting for human task completion
-            pending_tasks = await get_pending_tasks(workflow_run.run_id)
-            completed_tasks = await get_completed_tasks(workflow_run.run_id)
-
-            if completed_tasks:
-                # Tasks completed, mark as pending to trigger resume
-                await self.update_workflow_status(workflow_run.run_id, "pending")
-                await self.send_json(
-                    {
-                        "type": "status",
-                        "status": "resuming",
-                        "message": "Tasks completed, resuming workflow",
-                    }
-                )
-                # Reload workflow_run to get updated status
-                workflow_run = await self.get_workflow_run(workflow_run.run_id)
-                await self.resume_workflow_execution(workflow_run)
-            else:
-                # Still waiting for tasks
-                await self.send_json(
-                    {
-                        "type": "waiting",
-                        "status": "waiting_for_task",
-                        "pending_tasks": [
-                            {
-                                "id": t.task_id,
-                                "title": t.title,
-                                "url": f"/workflows/tasks/{t.task_id}/",
-                            }
-                            for t in pending_tasks
-                        ],
-                        "message": f"Workflow is waiting for {len(pending_tasks)} task(s) to be completed",
-                    }
-                )
-        elif workflow_run.status == "running":
-            # Reconnection to running workflow
+    async def _handle_connect_by_status(self, workflow_run):
+        status = workflow_run.status
+        if status == "pending":
+            await self._handle_pending_connect(workflow_run)
+        elif status in ("waiting_for_bpmn_timer", "waiting_for_bpmn_message"):
+            await self._send_waiting_bpmn_event(workflow_run)
+        elif status == "waiting_for_task":
+            await self._handle_waiting_task_connect(workflow_run)
+        elif status == "running":
             await self.send_json(
                 {
                     "type": "reconnected",
@@ -146,47 +80,117 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
                     "progress": workflow_run.progress_data or {},
                 }
             )
-        elif workflow_run.status == "completed":
-            # Already completed, send final results
+        elif status == "completed":
             await self.send_json({"type": "complete", "result": workflow_run.output_data})
-        elif workflow_run.status == "failed":
-            pd = workflow_run.progress_data or {}
-            eng = pd.get("engine_state") or {}
-            payload = {
-                "type": "error",
-                "message": workflow_run.error_message,
-                "failure_reason": pd.get("failure_reason"),
-                "failed_node_id": pd.get("failed_node_id"),
-                "last_successful_node_id": pd.get("last_successful_node_id"),
-                "condition_failure_metadata": pd.get("condition_failure_metadata"),
-            }
-            if pd.get("failure_reason") == "timeout":
-                payload["timeout_seconds"] = pd.get("timeout_seconds")
-                payload["timed_out_at"] = pd.get("timed_out_at")
-            if isinstance(eng, dict) and (
-                eng.get("pending_joins") or len(eng.get("active_tokens") or []) > 1
-            ):
-                payload["engine_state"] = {
-                    "active_tokens": eng.get("active_tokens"),
-                    "pending_joins": eng.get("pending_joins"),
+        elif status == "failed":
+            await self.send_json(self._failed_payload(workflow_run))
+        elif status == "cancelled":
+            await self.send_json(self._cancelled_payload(workflow_run))
+
+    async def _handle_pending_connect(self, workflow_run):
+        logger.info(
+            "Workflow %s is pending, has_progress_data=%s",
+            workflow_run.run_id,
+            bool(workflow_run.progress_data),
+        )
+        if workflow_run.progress_data:
+            logger.info("Resuming workflow %s from saved state", workflow_run.run_id)
+            await self.send_json(
+                {
+                    "type": "status",
+                    "status": "resuming",
+                    "message": "Task completed, resuming workflow",
                 }
-            await self.send_json(payload)
-        elif workflow_run.status == "cancelled":
-            pd = workflow_run.progress_data or {}
-            eng = pd.get("engine_state") or {}
-            payload = {
-                "type": "cancelled",
-                "message": workflow_run.error_message or "Workflow execution cancelled",
-                "failure_reason": pd.get("failure_reason") or "cancelled",
-                "cancelled_at": pd.get("cancelled_at"),
-                "last_successful_node_id": pd.get("last_successful_node_id"),
+            )
+            await self.resume_workflow_execution(workflow_run)
+            return
+        await self.start_workflow_execution(workflow_run)
+
+    async def _send_waiting_bpmn_event(self, workflow_run):
+        pd = workflow_run.progress_data or {}
+        eng = pd.get("engine_state") or {}
+        bew = eng.get("bpmn_event_wait") if isinstance(eng.get("bpmn_event_wait"), dict) else {}
+        await self.send_json(
+            {
+                "type": "waiting_bpmn_event",
+                "wait_kind": pd.get("bpmn_intermediate_wait_kind")
+                or ("timer" if workflow_run.status == "waiting_for_bpmn_timer" else "message"),
+                "next_step": pd.get("next_step"),
+                "bpmn_event_wait": bew,
+                "message": (
+                    "Waiting for BPMN timer; use Resume on the run page when ready."
+                    if workflow_run.status == "waiting_for_bpmn_timer"
+                    else "Waiting for BPMN message; satisfy message then resume."
+                ),
             }
-            if isinstance(eng, dict):
-                payload["engine_state"] = {
-                    "active_tokens": eng.get("active_tokens"),
-                    "pending_joins": eng.get("pending_joins"),
+        )
+
+    async def _handle_waiting_task_connect(self, workflow_run):
+        pending_tasks = await get_pending_tasks(workflow_run.run_id)
+        completed_tasks = await get_completed_tasks(workflow_run.run_id)
+        if completed_tasks:
+            await self.update_workflow_status(workflow_run.run_id, "pending")
+            await self.send_json(
+                {
+                    "type": "status",
+                    "status": "resuming",
+                    "message": "Tasks completed, resuming workflow",
                 }
-            await self.send_json(payload)
+            )
+            workflow_run = await self.get_workflow_run(workflow_run.run_id)
+            await self.resume_workflow_execution(workflow_run)
+            return
+        await self.send_json(
+            {
+                "type": "waiting",
+                "status": "waiting_for_task",
+                "pending_tasks": [
+                    {"id": t.task_id, "title": t.title, "url": f"/workflows/tasks/{t.task_id}/"}
+                    for t in pending_tasks
+                ],
+                "message": f"Workflow is waiting for {len(pending_tasks)} task(s) to be completed",
+            }
+        )
+
+    def _failed_payload(self, workflow_run):
+        pd = workflow_run.progress_data or {}
+        eng = pd.get("engine_state") or {}
+        payload = {
+            "type": "error",
+            "message": workflow_run.error_message,
+            "failure_reason": pd.get("failure_reason"),
+            "failed_node_id": pd.get("failed_node_id"),
+            "last_successful_node_id": pd.get("last_successful_node_id"),
+            "condition_failure_metadata": pd.get("condition_failure_metadata"),
+        }
+        if pd.get("failure_reason") == "timeout":
+            payload["timeout_seconds"] = pd.get("timeout_seconds")
+            payload["timed_out_at"] = pd.get("timed_out_at")
+        if isinstance(eng, dict) and (
+            eng.get("pending_joins") or len(eng.get("active_tokens") or []) > 1
+        ):
+            payload["engine_state"] = {
+                "active_tokens": eng.get("active_tokens"),
+                "pending_joins": eng.get("pending_joins"),
+            }
+        return payload
+
+    def _cancelled_payload(self, workflow_run):
+        pd = workflow_run.progress_data or {}
+        eng = pd.get("engine_state") or {}
+        payload = {
+            "type": "cancelled",
+            "message": workflow_run.error_message or "Workflow execution cancelled",
+            "failure_reason": pd.get("failure_reason") or "cancelled",
+            "cancelled_at": pd.get("cancelled_at"),
+            "last_successful_node_id": pd.get("last_successful_node_id"),
+        }
+        if isinstance(eng, dict):
+            payload["engine_state"] = {
+                "active_tokens": eng.get("active_tokens"),
+                "pending_joins": eng.get("pending_joins"),
+            }
+        return payload
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
@@ -321,32 +325,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
                 raise ValueError(f"Workflow {workflow_run.workflow_id} not found in registry")
 
             if can_run_with_bpmn_engine(workflow_run.workflow_id):
-
-                async def after_restore(st, wr):
-                    completed_tasks = await get_completed_tasks(wr.run_id)
-                    for task in completed_tasks:
-                        if task.task_type == "approval":
-                            st.human_review_result = task.output_data
-                            logger.info("Injected approval task %s result into state", task.task_id)
-
-                async def send_resume(msg_type, payload):
-                    if msg_type == "step":
-                        await self.send_json({"type": "step", "step": payload})
-                    elif msg_type == "complete":
-                        await self.send_json({"type": "complete", "result": payload})
-                    elif msg_type == "task_created":
-                        await self.send_json({"type": "task_created", **payload})
-                    elif msg_type == "error":
-                        if isinstance(payload, dict):
-                            await self.send_json({"type": "error", **payload})
-                        else:
-                            await self.send_json({"type": "error", "message": payload})
-
-                await resume_bpmn_after_pause(
-                    workflow_run,
-                    send_message=send_resume,
-                    after_state_restore=after_restore,
-                )
+                await self._resume_bpmn(workflow_run)
             else:
                 state_class_name = progress_data["state_class"]
                 state_data = progress_data["state_data"]
@@ -386,6 +365,33 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
             )
 
             await self.send_json({"type": "error", "message": f"Error resuming workflow: {str(e)}"})
+
+    async def _resume_bpmn(self, workflow_run):
+        async def after_restore(st, wr):
+            completed_tasks = await get_completed_tasks(wr.run_id)
+            for task in completed_tasks:
+                if task.task_type == "approval":
+                    st.human_review_result = task.output_data
+                    logger.info("Injected approval task %s result into state", task.task_id)
+
+        async def send_resume(msg_type, payload):
+            if msg_type == "step":
+                await self.send_json({"type": "step", "step": payload})
+            elif msg_type == "complete":
+                await self.send_json({"type": "complete", "result": payload})
+            elif msg_type == "task_created":
+                await self.send_json({"type": "task_created", **payload})
+            elif msg_type == "error":
+                if isinstance(payload, dict):
+                    await self.send_json({"type": "error", **payload})
+                else:
+                    await self.send_json({"type": "error", "message": payload})
+
+        await resume_bpmn_after_pause(
+            workflow_run,
+            send_message=send_resume,
+            after_state_restore=after_restore,
+        )
 
     async def cancel_workflow(self):
         """Cancel the running workflow"""

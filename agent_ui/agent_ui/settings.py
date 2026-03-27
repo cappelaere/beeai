@@ -2,9 +2,12 @@
 Django settings for agent_ui project.
 """
 
+import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
 
@@ -90,8 +93,52 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        # Keep lock waits bounded so web requests stay responsive under contention.
+        "OPTIONS": {"timeout": 8},
     }
 }
+
+
+def _session_redis_location() -> str:
+    """Redis URL for Django sessions (logical DB 2; Channels often uses /0). Override with SESSION_REDIS_URL."""
+    explicit = os.environ.get("SESSION_REDIS_URL", "").strip()
+    if explicit:
+        return explicit
+    primary = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0").strip()
+    p = urlparse(primary)
+    return urlunparse((p.scheme, p.netloc, "/2", "", "", ""))
+
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    },
+}
+
+
+def _enable_redis_session_cache() -> None:
+    CACHES["sessions"] = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": _session_redis_location(),
+    }
+
+
+# Sessions: SQLite django_session + concurrent ASGI → SessionInterrupted ("Forced update did not affect any rows").
+# If REDIS_URL is set (typical local .env), use Redis cache sessions. Otherwise DEBUG → signed cookies; else DB.
+# DJANGO_SESSION_ENGINE: db | signed_cookies | cache (Redis; uses SESSION_REDIS_URL or derived from REDIS_URL)
+_session_engine = os.environ.get("DJANGO_SESSION_ENGINE", "").strip().lower()
+_redis_url = os.environ.get("REDIS_URL", "").strip()
+
+if _session_engine in ("db", "database"):
+    pass  # django.contrib.sessions.backends.db (default)
+elif _session_engine in ("cookie", "signed", "signed_cookies"):
+    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+elif _session_engine == "cache" or _redis_url:
+    _enable_redis_session_cache()
+    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+    SESSION_CACHE_ALIAS = "sessions"
+elif DEBUG:
+    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
 # Django Channels Configuration
 CHANNEL_LAYERS = {
@@ -121,14 +168,11 @@ MEDIA_ROOT = BASE_DIR.parent / "media"  # Store media files in project root
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Logging Configuration
-import logging
-from datetime import datetime
-
 LOG_DIR = BASE_DIR.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 # Create timestamped log file name
-LOG_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+LOG_TIMESTAMP = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
 LOG_FILE = LOG_DIR / f"realtyiq_{LOG_TIMESTAMP}.log"
 
 

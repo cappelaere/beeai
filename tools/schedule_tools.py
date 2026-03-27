@@ -60,7 +60,7 @@ async def list_schedules(user_id: int | None = None) -> StringToolOutput:
                     "run_at": s.run_at.isoformat() if s.run_at else None,
                     "interval_minutes": s.interval_minutes,
                     "is_active": s.is_active,
-                    "view_url": f"/workflows/schedules/",
+                    "view_url": "/workflows/schedules/",
                 }
                 for s in schedules
             ]

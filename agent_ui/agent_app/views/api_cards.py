@@ -12,11 +12,24 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from agent_app.forms import AssistantCardForm
 from agent_app.models import AssistantCard
 
 logger = logging.getLogger(__name__)
 
 # Updated: 2026-02-21 - Added agent/workflow folder deletion and integrity validation
+
+
+def _card_to_api_dict(card: AssistantCard) -> dict:
+    """Serialize card fields used by card APIs."""
+    return {
+        "id": card.id,
+        "name": card.name,
+        "description": card.description or "",
+        "prompt": card.prompt,
+        "is_favorite": card.is_favorite,
+        "agent_type": card.agent_type,
+    }
 
 
 def cards_view(request):
@@ -27,9 +40,6 @@ def cards_view(request):
 
 
 def card_create_view(request):
-
-    from .forms import AssistantCardForm
-
     if request.method == "POST":
         form = AssistantCardForm(request.POST)
 
@@ -45,9 +55,6 @@ def card_create_view(request):
 
 
 def card_edit_view(request, pk):
-
-    from .forms import AssistantCardForm
-
     card = get_object_or_404(AssistantCard, pk=pk)
 
     if request.method == "POST":
@@ -65,7 +72,6 @@ def card_edit_view(request, pk):
 
 
 @require_POST
-@require_POST
 def card_delete_view(request, pk):
 
     card = get_object_or_404(AssistantCard, pk=pk)
@@ -76,7 +82,6 @@ def card_delete_view(request, pk):
 
 
 @require_GET
-@require_GET
 def cards_list_api(request):
     """Return list of cards; ?favorites=1 for favorites only. Always includes prompt for home page."""
 
@@ -85,19 +90,7 @@ def cards_list_api(request):
     if request.GET.get("favorites") == "1":
         qs = qs.filter(is_favorite=True)
 
-    cards = []
-
-    for c in qs:
-        row = {
-            "id": c.id,
-            "name": c.name,
-            "description": c.description or "",
-            "prompt": c.prompt,  # Always include prompt for home page cards
-            "is_favorite": c.is_favorite,
-            "agent_type": c.agent_type,
-        }
-
-        cards.append(row)
+    cards = [_card_to_api_dict(card) for card in qs]
 
     return JsonResponse({"cards": cards})
 
@@ -112,23 +105,11 @@ def cards_by_agent_api(request, agent_type):
         .order_by("name")
     )
 
-    cards = []
-    for c in qs:
-        cards.append(
-            {
-                "id": c.id,
-                "name": c.name,
-                "description": c.description or "",
-                "prompt": c.prompt,
-                "is_favorite": c.is_favorite,
-                "agent_type": c.agent_type,
-            }
-        )
+    cards = [_card_to_api_dict(card) for card in qs]
 
     return JsonResponse({"cards": cards})
 
 
-@require_GET
 @require_GET
 def card_use_api(request, pk):
 
@@ -142,8 +123,6 @@ def card_use_api(request, pk):
     )
 
 
-@require_http_methods(["POST", "PATCH"])
-@csrf_exempt
 @require_http_methods(["POST", "PATCH"])
 @csrf_exempt
 def card_patch_api(request, pk):
@@ -184,8 +163,6 @@ def card_patch_api(request, pk):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
 
-@require_POST
-@csrf_exempt
 @require_POST
 @csrf_exempt
 def card_favorite_api(request, pk):

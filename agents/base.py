@@ -197,7 +197,7 @@ def load_skills_documentation(agent_id: str) -> str:
         return ""
 
     try:
-        with open(skills_path, encoding="utf-8") as f:
+        with skills_path.open(encoding="utf-8") as f:
             content = f.read()
         return content.strip()
     except Exception as e:

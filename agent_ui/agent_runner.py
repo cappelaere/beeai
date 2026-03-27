@@ -278,7 +278,7 @@ async def _execute_agent(agent, messages):
 
         if original_error is not error:
             logger.error(f"Original cause: {type(original_error).__name__}: {original_error}")
-            raise original_error
+            raise original_error from error
 
         raise
 
@@ -408,12 +408,9 @@ async def run_agent(
     if cached_result:
         return cached_result
 
-    try:
-        from observability import trace_agent_run
+    import importlib.util
 
-        observability_enabled = True
-    except ImportError:
-        observability_enabled = False
+    observability_enabled = importlib.util.find_spec("observability") is not None
 
     metadata = {}
 

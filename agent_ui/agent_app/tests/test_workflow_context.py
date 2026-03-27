@@ -13,7 +13,6 @@ import yaml
 from django.test import TestCase
 
 from agent_app.services import workflow_service
-
 from agent_app.workflow_context import (
     get_first_task_id,
     get_next_task_id,
@@ -25,9 +24,9 @@ from agent_app.workflow_context import (
     traverse_until_executable,
     validate_bpmn_bindings_context,
     validate_bpmn_boundary_events,
+    validate_bpmn_embedded_subprocesses,
     validate_bpmn_for_save,
     validate_bpmn_intermediate_catch_events,
-    validate_bpmn_embedded_subprocesses,
     validate_exclusive_gateway_semantics,
     validate_parallel_fork_join_correlation,
     validate_parallel_gateway_topology,
@@ -224,8 +223,8 @@ class ParallelGatewayTopologyTests(TestCase):
 
     def test_parallel_gateway_degree_rules_exhaustive_small_grid(self):
         """Only fork (1 in, 2+ out) and join (2+ in, 1 out) accept; grid documents all pairs."""
-        for ni in range(0, 5):
-            for no in range(0, 5):
+        for ni in range(5):
+            for no in range(5):
                 inc = [f"x{ni}_{j}" for j in range(ni)]
                 out = [f"y{no}_{j}" for j in range(no)]
                 bpmn = {

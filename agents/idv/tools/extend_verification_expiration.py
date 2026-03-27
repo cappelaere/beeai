@@ -25,14 +25,16 @@ from ._django_ready import get_identity_verification_model
 
 def _extend_verification_sync(verification_hash: str, extension_days: int) -> str:
     """Synchronous helper function for database queries"""
-    IdentityVerification = get_identity_verification_model()
+    identity_verification_model = get_identity_verification_model()
     # Validate extension days (reasonable limits)
     if extension_days < 1 or extension_days > 730:  # Max 2 years
         response = {"success": False, "error": "Extension must be between 1 and 730 days"}
         return json.dumps(response, indent=2)
 
     # Find verification
-    verification = IdentityVerification.objects.filter(verification_hash=verification_hash).first()
+    verification = identity_verification_model.objects.filter(
+        verification_hash=verification_hash
+    ).first()
 
     if not verification:
         response = {"success": False, "error": "Verification not found with the provided hash"}

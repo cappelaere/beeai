@@ -43,8 +43,9 @@ def load_faiss_index():
     _faiss_index = faiss.read_index(str(FAISS_INDEX_FILE))
 
     if METADATA_FILE.exists():
-        with open(METADATA_FILE, "rb") as f:
-            _document_metadata = pickle.load(f)
+        with METADATA_FILE.open("rb") as f:
+            # Metadata file is generated locally by this app (not user-supplied).
+            _document_metadata = pickle.load(f)  # noqa: S301
     else:
         _document_metadata = []
 
@@ -54,7 +55,7 @@ def save_faiss_index():
     FAISS_INDEX_DIR.mkdir(parents=True, exist_ok=True)
     faiss.write_index(_faiss_index, str(FAISS_INDEX_FILE))
 
-    with open(METADATA_FILE, "wb") as f:
+    with METADATA_FILE.open("wb") as f:
         pickle.dump(_document_metadata, f)
 
 

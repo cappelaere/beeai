@@ -72,7 +72,7 @@ class TestDjangoStartupSmoke(TestCase):
         # A fresh `manage.py check` from agent_ui/ must use manage.py's default (agent_ui.settings).
         sub_env = {**os.environ}
         sub_env.pop("DJANGO_SETTINGS_MODULE", None)
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - test invokes trusted local manage.py with fixed args
             [sys.executable, str(manage_py), "check"],
             capture_output=True,
             text=True,

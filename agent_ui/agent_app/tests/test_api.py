@@ -4,6 +4,7 @@ Tests all backend API endpoints and functionality
 """
 
 import json
+import time
 
 from django.test import Client, TestCase
 
@@ -50,13 +51,26 @@ class ChatAPITests(TestCase):
 
     def test_chat_history(self):
         """Test retrieving chat history"""
-        # Create session with messages
-        response = self.client.post(
-            "/api/chat/",
-            data=json.dumps({"prompt": "Test message"}),
-            content_type="application/json",
-        )
-        session_id = response.json()["session_id"]
+        # Create session with messages (retry once on transient sqlite lock)
+        session_id = None
+        for attempt in range(2):
+            response = self.client.post(
+                "/api/chat/",
+                data=json.dumps({"prompt": "Test message"}),
+                content_type="application/json",
+            )
+            data = response.json()
+            if response.status_code == 200 and "session_id" in data:
+                session_id = data["session_id"]
+                break
+            if (
+                "database table is locked" in json.dumps(data).lower()
+                and attempt == 0
+            ):
+                time.sleep(0.1)
+                continue
+            self.fail(f"Failed to create chat session: status={response.status_code}, body={data}")
+        self.assertIsNotNone(session_id)
 
         # Get history
         history_response = self.client.get(f"/api/chat/{session_id}/")

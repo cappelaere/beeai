@@ -236,6 +236,43 @@ def _execute_agent(
     return response_text, trace_id, from_cache, elapsed_ms
 
 
+def _is_rate_limit_error(exception: Exception, error_msg: str) -> bool:
+    msg_lower = error_msg.lower()
+    cause = getattr(exception, "__cause__", None)
+    return (
+        "rate limit" in msg_lower
+        or "429" in error_msg
+        or (cause and "rate limit" in str(cause).lower())
+    )
+
+
+def _extract_anthropic_error_payload(exception: Exception) -> dict | None:
+    current = exception
+    while current:
+        current_msg = str(current)
+        if current_msg.strip().startswith("{"):
+            try:
+                parsed = json.loads(current_msg)
+                if isinstance(parsed, dict) and "error" in parsed:
+                    return parsed
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.debug("Could not parse error shape from exception: %s", e)
+
+        if hasattr(current, "body"):
+            try:
+                if isinstance(current.body, dict):
+                    return current.body
+                if isinstance(current.body, str):
+                    parsed_body = json.loads(current.body)
+                    if isinstance(parsed_body, dict):
+                        return parsed_body
+            except (json.JSONDecodeError, ValueError, AttributeError) as e:
+                logger.debug("Could not parse error shape from exception: %s", e)
+
+        current = getattr(current, "__cause__", None)
+    return None
+
+
 def _format_error_response(exception):
     """Format exception as user-friendly error message."""
     error_msg = str(exception)
@@ -243,48 +280,14 @@ def _format_error_response(exception):
 
     logger.error(f"Error in chat_api: {error_type}: {error_msg}", exc_info=True)
 
-    # Rate limit (OpenAI/Anthropic 429) – show a clear, actionable message
-    msg_lower = error_msg.lower()
-    cause = getattr(exception, "__cause__", None)
-    if (
-        "rate limit" in msg_lower
-        or "429" in error_msg
-        or (cause and "rate limit" in str(cause).lower())
-    ):
+    if _is_rate_limit_error(exception, error_msg):
         return (
             "**Rate limit reached**\n\n"
             "The model provider is temporarily limiting requests. "
             "Please wait a minute and try again."
         )
 
-    # Try to extract Anthropic API error
-    anthropic_error = None
-    current = exception
-
-    while current:
-        current_msg = str(current)
-        if current_msg.strip().startswith("{"):
-            try:
-                parsed = json.loads(current_msg)
-                if isinstance(parsed, dict) and "error" in parsed:
-                    anthropic_error = parsed
-                    break
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.debug("Could not parse error shape from exception: %s", e)
-
-        if hasattr(current, "body"):
-            try:
-                if isinstance(current.body, dict):
-                    anthropic_error = current.body
-                    break
-                if isinstance(current.body, str):
-                    anthropic_error = json.loads(current.body)
-                    break
-            except (json.JSONDecodeError, ValueError, AttributeError) as e:
-                logger.debug("Could not parse error shape from exception: %s", e)
-
-        current = getattr(current, "__cause__", None)
-
+    anthropic_error = _extract_anthropic_error_payload(exception)
     if anthropic_error and isinstance(anthropic_error, dict):
         error_details = anthropic_error.get("error", {})
         error_subtype = error_details.get("type", "unknown_error")

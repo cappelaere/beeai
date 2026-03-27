@@ -5,9 +5,10 @@ Run: pytest agent_ui/agent_app/tests/ (from repo root) or pytest agent_app/tests
 
 import os
 import sys
+from pathlib import Path
 
-_agent_ui = os.path.dirname(os.path.abspath(__file__))
-_repo_root = os.path.dirname(_agent_ui)
+_agent_ui = str(Path(__file__).resolve().parent)
+_repo_root = str(Path(_agent_ui).parent)
 # So "agent_ui" is the outer package (agent_ui/agent_app, agent_ui/agent_ui/...) and test collection finds agent_ui.agent_app
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)

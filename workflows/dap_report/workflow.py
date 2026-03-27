@@ -105,6 +105,7 @@ class DAPReportState(BaseModel):
     trends: Optional[Dict[str, Any]] = None
     analysis_results: Optional[Dict[str, Any]] = None
     issues_found: List[Dict[str, Any]] = Field(default_factory=list)
+    has_issues: bool = Field(default=False)
 
     model_config = {"extra": "allow"}
 
@@ -172,6 +173,7 @@ class DAPReportWorkflow:
         issue_result = await self.check_and_flag_issues(context)
         state.analysis_results = self.analysis_results
         state.issues_found = self.issues_found
+        state.has_issues = bool(self.issues_found)
         return None
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:

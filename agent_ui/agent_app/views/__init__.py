@@ -230,6 +230,7 @@ __all__ = [
     "agent_remove",
     # API: Workflows
     "workflow_create",
+    "generate_workflow_user_story",
     "workflow_favorite_api",
     "workflow_save",
     "workflow_restore_version",
@@ -247,6 +248,7 @@ __all__ = [
     "cache_stats_api",
     "cache_clear_api",
     "context_settings_api",
+    "section_508_api",
     # API: Sessions
     "chat_sessions_api",
     "create_session_api",
@@ -260,6 +262,7 @@ __all__ = [
     # API: Chat
     "chat_api",
     "chat_history_api",
+    "serve_agent_chart",
     # API: Cards
     "cards_view",
     "card_create_view",

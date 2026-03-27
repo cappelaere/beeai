@@ -3,7 +3,6 @@ Workflow service: business logic for workflow creation, save, and versioning.
 Views in api_workflows delegate here and map domain exceptions to HTTP.
 """
 
-import json
 import logging
 import re
 from pathlib import Path
@@ -323,7 +322,7 @@ def _derive_input_schema_from_workflow(workflow_code: str) -> str:
     for name in field_names:
         desc = descriptions.get(name) or name.replace("_", " ").title()
         lines.append(f"  {name}:")
-        lines.append(f"    type: string")
+        lines.append("    type: string")
         lines.append(f"    description: {desc!r}")
     return "\n".join(lines)
 
@@ -554,15 +553,14 @@ def save_workflow(
     Update workflow metadata and files, validate BPMN context, create version, reload registry.
     Returns (version, validation). Raises WorkflowNotFoundError, ValueError.
     """
+    from agent_app.version_manager import version_manager
     from agent_app.workflow_context import (
         dump_bindings_yaml,
         get_workflow_context,
-        normalize_bindings,
         parse_bpmn_xml,
         validate_bpmn_bindings_context,
         validate_bpmn_for_save,
     )
-    from agent_app.version_manager import version_manager
     from agent_app.workflow_registry import workflow_registry
 
     workflow = workflow_registry.get(workflow_id)
@@ -573,56 +571,28 @@ def save_workflow(
     meta = workflow.get("metadata")
     assets_path = getattr(meta, "current_version_path", None) or workflow_path
 
-    if bindings_json is not None:
-        file_updates = dict(file_updates)
-        normalized_bindings = normalize_bindings(bindings_json, workflow_id=workflow_id)
-        file_updates["bpmn-bindings.yaml"] = dump_bindings_yaml(normalized_bindings)
-
-    # Save-time BPMN validation (graph, gateways, bindings) before writing files
-    if "workflow.bpmn" in file_updates:
-        bpmn_xml = file_updates["workflow.bpmn"]
-        if bpmn_xml and isinstance(bpmn_xml, str):
-            bpmn = parse_bpmn_xml(bpmn_xml)
-            if "parse_error" not in bpmn:
-                bindings_for_check: dict | None = None
-                if "bpmn-bindings.yaml" in file_updates:
-                    bindings_for_check = normalize_bindings(
-                        _bindings_dict_from_yaml(file_updates["bpmn-bindings.yaml"]),
-                        workflow_id=workflow_id,
-                    )
-                else:
-                    p = assets_path / "bpmn-bindings.yaml"
-                    if p.exists():
-                        bindings_for_check = normalize_bindings(
-                            _bindings_dict_from_yaml(p.read_text(encoding="utf-8")),
-                            workflow_id=workflow_id,
-                        )
-                save_errors = validate_bpmn_for_save(bpmn, bindings_for_check)
-                if save_errors:
-                    raise ValueError(
-                        "Invalid BPMN or bindings. Fix before saving: " + " ".join(save_errors)
-                    )
+    file_updates = _normalized_file_updates(
+        file_updates=file_updates,
+        bindings_json=bindings_json,
+        workflow_id=workflow_id,
+        normalize_bindings=normalize_bindings,
+        dump_bindings_yaml=dump_bindings_yaml,
+    )
+    _validate_bpmn_before_save(
+        workflow_id=workflow_id,
+        file_updates=file_updates,
+        assets_path=assets_path,
+        parse_bpmn_xml=parse_bpmn_xml,
+        normalize_bindings=normalize_bindings,
+        validate_bpmn_for_save=validate_bpmn_for_save,
+    )
 
     metadata_file = workflow_path / "metadata.yaml"
     if metadata_file.exists():
-        with open(metadata_file, encoding="utf-8") as f:
+        with metadata_file.open(encoding="utf-8") as f:
             metadata_dict = yaml.safe_load(f)
-        metadata_dict["name"] = metadata_updates.get("name", metadata_dict.get("name"))
-        metadata_dict["description"] = metadata_updates.get(
-            "description", metadata_dict.get("description")
-        )
-        metadata_dict["icon"] = metadata_updates.get("icon", metadata_dict.get("icon"))
-        metadata_dict["category"] = metadata_updates.get("category", metadata_dict.get("category"))
-        metadata_dict["estimated_duration"] = metadata_updates.get(
-            "estimated_duration", metadata_dict.get("estimated_duration")
-        )
-        if "input_schema" in metadata_updates and isinstance(
-            metadata_updates["input_schema"], dict
-        ):
-            metadata_dict["input_schema"] = metadata_updates["input_schema"]
-        if "outputs" in metadata_updates and isinstance(metadata_updates["outputs"], list):
-            metadata_dict["outputs"] = metadata_updates["outputs"]
-        with open(metadata_file, "w", encoding="utf-8") as f:
+        _apply_metadata_updates(metadata_dict, metadata_updates)
+        with metadata_file.open("w", encoding="utf-8") as f:
             yaml.dump(metadata_dict, f, default_flow_style=False, allow_unicode=True)
 
     bpmn_files = {"workflow.bpmn", "bpmn-bindings.yaml"}
@@ -641,6 +611,87 @@ def save_workflow(
     )
     workflow_registry.reload()
     return (version, validation)
+
+
+def _normalized_file_updates(
+    *,
+    file_updates: dict,
+    bindings_json: Any,
+    workflow_id: str,
+    normalize_bindings,
+    dump_bindings_yaml,
+) -> dict:
+    updates = dict(file_updates)
+    if bindings_json is None:
+        return updates
+    normalized_bindings = normalize_bindings(bindings_json, workflow_id=workflow_id)
+    updates["bpmn-bindings.yaml"] = dump_bindings_yaml(normalized_bindings)
+    return updates
+
+
+def _bindings_for_validation(
+    *,
+    workflow_id: str,
+    file_updates: dict,
+    assets_path: Path,
+    normalize_bindings,
+) -> dict | None:
+    if "bpmn-bindings.yaml" in file_updates:
+        return normalize_bindings(
+            _bindings_dict_from_yaml(file_updates["bpmn-bindings.yaml"]),
+            workflow_id=workflow_id,
+        )
+    bindings_path = assets_path / "bpmn-bindings.yaml"
+    if not bindings_path.exists():
+        return None
+    return normalize_bindings(
+        _bindings_dict_from_yaml(bindings_path.read_text(encoding="utf-8")),
+        workflow_id=workflow_id,
+    )
+
+
+def _validate_bpmn_before_save(
+    *,
+    workflow_id: str,
+    file_updates: dict,
+    assets_path: Path,
+    parse_bpmn_xml,
+    normalize_bindings,
+    validate_bpmn_for_save,
+) -> None:
+    if "workflow.bpmn" not in file_updates:
+        return
+    bpmn_xml = file_updates["workflow.bpmn"]
+    if not (bpmn_xml and isinstance(bpmn_xml, str)):
+        return
+    bpmn = parse_bpmn_xml(bpmn_xml)
+    if "parse_error" in bpmn:
+        return
+    bindings_for_check = _bindings_for_validation(
+        workflow_id=workflow_id,
+        file_updates=file_updates,
+        assets_path=assets_path,
+        normalize_bindings=normalize_bindings,
+    )
+    save_errors = validate_bpmn_for_save(bpmn, bindings_for_check)
+    if save_errors:
+        raise ValueError("Invalid BPMN or bindings. Fix before saving: " + " ".join(save_errors))
+
+
+def _apply_metadata_updates(metadata_dict: dict, metadata_updates: dict) -> None:
+    metadata_dict["name"] = metadata_updates.get("name", metadata_dict.get("name"))
+    metadata_dict["description"] = metadata_updates.get(
+        "description", metadata_dict.get("description")
+    )
+    metadata_dict["icon"] = metadata_updates.get("icon", metadata_dict.get("icon"))
+    metadata_dict["category"] = metadata_updates.get("category", metadata_dict.get("category"))
+    metadata_dict["estimated_duration"] = metadata_updates.get(
+        "estimated_duration", metadata_dict.get("estimated_duration")
+    )
+    if "input_schema" in metadata_updates and isinstance(metadata_updates["input_schema"], dict):
+        metadata_dict["input_schema"] = metadata_updates["input_schema"]
+    if "outputs" in metadata_updates and isinstance(metadata_updates["outputs"], list):
+        metadata_dict["outputs"] = metadata_updates["outputs"]
 
 
 def restore_version(workflow_id: str, version_number: int, user_id: int) -> Any:

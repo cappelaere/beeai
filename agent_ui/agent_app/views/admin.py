@@ -143,8 +143,9 @@ def _get_system_stats():
         db_engine = connection.settings_dict["ENGINE"]
         if "sqlite" in db_engine.lower():
             db_path = connection.settings_dict.get("NAME")
-            if db_path and db_path != ":memory:" and os.path.exists(db_path):
-                size_bytes = os.path.getsize(db_path)
+            db_file = Path(db_path) if db_path and db_path != ":memory:" else None
+            if db_file and db_file.exists():
+                size_bytes = db_file.stat().st_size
                 db_size = format_bytes(size_bytes)
         elif "postgres" in db_engine.lower():
             with connection.cursor() as cursor:
@@ -477,7 +478,7 @@ def docs_view(request, path):
 
     try:
         # Read markdown file
-        with open(doc_path, encoding="utf-8") as f:
+        with doc_path.open(encoding="utf-8") as f:
             markdown_content = f.read()
 
         # Convert to HTML
@@ -595,16 +596,13 @@ def settings_view(request):
 
 def logs_api(request):
     """API endpoint to list available log files"""
-    import glob
-
     log_dir = Path(__file__).parent.parent.parent.parent / "logs"
 
     if not log_dir.exists():
         return JsonResponse({"logs": []})
 
     log_files = []
-    for log_file in glob.glob(str(log_dir / "*.log")):
-        file_path = Path(log_file)
+    for file_path in log_dir.glob("*.log"):
         log_files.append(
             {
                 "name": file_path.name,
@@ -631,7 +629,7 @@ def log_view(request, log_name):
         return HttpResponseNotFound(f"Log file not found: {log_name}")
 
     try:
-        with open(log_path) as f:
+        with log_path.open() as f:
             lines = f.readlines()
 
         # Reverse for newest first
@@ -698,7 +696,7 @@ def diagram_view(request, diagram_name):
         return HttpResponseNotFound(f"Diagram not found: {diagram_name}")
 
     try:
-        with open(diagram_path) as f:
+        with diagram_path.open() as f:
             diagram_content = f.read()
 
         return render(

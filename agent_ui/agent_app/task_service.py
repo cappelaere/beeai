@@ -14,7 +14,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-class TaskPendingException(Exception):
+class TaskPendingError(Exception):
     """
     Exception raised when workflow needs to wait for human task completion.
 
@@ -53,7 +53,7 @@ class BpmnModeledBoundaryError(Exception):
         super().__init__(message)
 
 
-class BpmnIntermediateWaitException(Exception):
+class BpmnIntermediateWaitError(Exception):
     """
     BPMN intermediateCatchEvent (timer or message) not satisfied; runner persists progress
     and sets status to waiting_for_bpmn_timer / waiting_for_bpmn_message (PAR-015).
@@ -63,9 +63,7 @@ class BpmnIntermediateWaitException(Exception):
         self.state = state
         self.next_step = next_step
         self.wait_kind = wait_kind  # "timer" | "message"
-        super().__init__(
-            f"Workflow paused on intermediate catch ({wait_kind}) at {next_step}"
-        )
+        super().__init__(f"Workflow paused on intermediate catch ({wait_kind}) at {next_step}")
 
 
 async def create_human_task(
@@ -85,7 +83,7 @@ async def create_human_task(
     1. Generates a unique task_id
     2. Creates HumanTask database record
     3. Updates WorkflowRun status to 'waiting_for_task'
-    4. Raises TaskPendingException with state for serialization
+    4. Raises TaskPendingError with state for serialization
 
     Args:
         workflow_run_id: ID of the parent workflow run
@@ -98,7 +96,7 @@ async def create_human_task(
         input_data: Context data to display in task form
 
     Raises:
-        TaskPendingException: Always raised to signal workflow pause
+        TaskPendingError: Always raised to signal workflow pause
     """
     from .utils import generate_short_run_id
 
@@ -144,7 +142,7 @@ async def create_human_task(
     task_id = await create_task_db()
 
     # Raise exception to pause workflow with state for serialization
-    raise TaskPendingException(task_id, task_type, state, next_step)
+    raise TaskPendingError(task_id, task_type, state, next_step)
 
 
 @database_sync_to_async

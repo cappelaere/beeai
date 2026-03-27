@@ -21,7 +21,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"File not found: {bi_file}"))
             return
 
-        with open(bi_file, encoding="utf-8") as f:
+        with bi_file.open(encoding="utf-8") as f:
             f.read()
 
         # Extract prompts from various sections

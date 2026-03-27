@@ -166,7 +166,7 @@ class CommandAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("Available agents", data["response"])
-        self.assertIn("gres", data["response"])
+        self.assertIn(" - ", data["response"])
 
     def test_agent_switch_command(self):
         """Test /agent switch command."""

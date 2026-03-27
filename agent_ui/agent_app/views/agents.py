@@ -83,7 +83,7 @@ def agent_detail(request, agent_id):
 
         if skills_path and skills_path.exists():
             try:
-                with open(skills_path, encoding="utf-8") as f:
+                with skills_path.open(encoding="utf-8") as f:
                     skills_md = f.read()
 
                     # Convert markdown to HTML with extensions
@@ -112,7 +112,7 @@ def agent_detail(request, agent_id):
 
         return render(request, "agents/detail.html", {"agent": agent})
 
-    except KeyError:
+    except KeyError as e:
         from django.http import Http404
 
-        raise Http404(f"Agent '{agent_id}' not found")
+        raise Http404(f"Agent '{agent_id}' not found") from e

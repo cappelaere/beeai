@@ -139,7 +139,7 @@ def synthesize_speech(
                     indent=2,
                 )
             )
-        except:
+        except (AttributeError, TypeError, ValueError):
             return StringToolOutput(
                 json.dumps(
                     {

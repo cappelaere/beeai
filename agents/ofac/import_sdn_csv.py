@@ -125,7 +125,7 @@ def import_csv():
 
     print(f"Importing from: {CSV_PATH}")
 
-    with open(CSV_PATH, encoding="utf-8") as f:
+    with CSV_PATH.open(encoding="utf-8") as f:
         reader = csv.reader(f)
 
         for row_num, row in enumerate(reader, 1):

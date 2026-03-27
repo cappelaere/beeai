@@ -6,7 +6,7 @@ Handles versioning of workflow definitions using folder-based snapshots.
 import hashlib
 import logging
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.db import transaction
@@ -37,7 +37,7 @@ class VersionManager:
             return ""
 
         sha256 = hashlib.sha256()
-        with open(file_path, "rb") as f:
+        with file_path.open("rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 sha256.update(chunk)
         return sha256.hexdigest()
@@ -110,7 +110,7 @@ class VersionManager:
         version_number = (last_version.version_number + 1) if last_version else 1
 
         # Create timestamp-based folder name
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
         version_folder_name = f"v{version_number}_{timestamp}"
 
         # Create version directory
@@ -298,12 +298,12 @@ class VersionManager:
             # Read file contents
             lines1 = []
             if file1.exists():
-                with open(file1, encoding="utf-8") as f:
+                with file1.open(encoding="utf-8") as f:
                     lines1 = f.readlines()
 
             lines2 = []
             if file2.exists():
-                with open(file2, encoding="utf-8") as f:
+                with file2.open(encoding="utf-8") as f:
                     lines2 = f.readlines()
 
             # Generate unified diff
@@ -451,7 +451,7 @@ class VersionManager:
         for filename in files_to_read:
             file_path = version_path / filename
             if file_path.exists():
-                with open(file_path, encoding="utf-8") as f:
+                with file_path.open(encoding="utf-8") as f:
                     files[filename] = f.read()
 
         return files
@@ -512,7 +512,7 @@ class VersionManager:
         workflow_path = self._get_workflow_path(workflow_id)
         changelog_path = workflow_path / "CHANGELOG.md"
 
-        with open(changelog_path, "w", encoding="utf-8") as f:
+        with changelog_path.open("w", encoding="utf-8") as f:
             f.write(changelog_content)
 
         logger.info(f"Saved changelog for workflow {workflow_id} to {changelog_path}")

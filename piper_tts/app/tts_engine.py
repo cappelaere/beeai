@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import numpy as np
 
-from app.config import config
-from app.models import Voice, Gender
+from .config import config
+from .models import Voice, Gender
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +72,9 @@ class TTSEngine:
             raise ValueError(f"Voice '{voice_id}' not found. Available voices: {', '.join(available)}")
         
         logger.info(f"Loading voice model: {voice_id}")
-        PiperVoice = _get_piper_voice()
+        piper_voice = _get_piper_voice()
         try:
-            voice = PiperVoice.load(str(voice_path), config_path=str(config_path))
+            voice = piper_voice.load(str(voice_path), config_path=str(config_path))
             self._loaded_models[voice_id] = voice
             logger.info(f"Successfully loaded voice: {voice_id}")
             return voice

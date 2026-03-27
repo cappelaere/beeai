@@ -5,6 +5,7 @@
 from datetime import datetime, timedelta
 
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from agent_app.constants import ANONYMOUS_USER_ID
 from agent_app.models import ScheduledWorkflow
@@ -158,11 +159,16 @@ def _parse_at_datetime(args, i):
     if i + 1 >= len(args):
         return None, "Provide date and time after 'at' (e.g. 2025-03-10 09:00)"
     date_str = " ".join(args[i + 1 :]).strip()
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(date_str, fmt), None
-        except ValueError:
-            continue
+    parsed_dt = parse_datetime(date_str)
+    if parsed_dt is not None:
+        if timezone.is_naive(parsed_dt):
+            parsed_dt = timezone.make_aware(parsed_dt, timezone.get_current_timezone())
+        return parsed_dt, None
+
+    parsed_date = parse_date(date_str)
+    if parsed_date is not None:
+        parsed_dt = datetime.combine(parsed_date, datetime.min.time())
+        return timezone.make_aware(parsed_dt, timezone.get_current_timezone()), None
     return None, "Could not parse date/time. Use YYYY-MM-DD HH:MM"
 
 

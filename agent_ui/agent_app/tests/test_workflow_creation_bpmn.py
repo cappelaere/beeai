@@ -3,6 +3,7 @@ Workflow creation test: creating a workflow produces currentVersion/workflow.bpm
 and currentVersion/bpmn-bindings.yaml with expected structure.
 """
 
+import contextlib
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -42,10 +43,8 @@ class WorkflowCreationBpmnTests(TestCase):
     def tearDown(self):
         import shutil
 
-        try:
+        with contextlib.suppress(Exception):
             shutil.rmtree(self.tmp, ignore_errors=True)
-        except Exception:
-            pass
 
     @patch("agent_app.workflow_registry.workflow_registry", new_callable=MagicMock)
     @patch.object(workflow_service, "_generate_workflow_code")
