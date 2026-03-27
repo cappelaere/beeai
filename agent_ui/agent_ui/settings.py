@@ -49,6 +49,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "agent_app.analytics.middleware.WebsiteAnalyticsMiddleware",
     "agent_app.middleware.prometheus_middleware.PrometheusMiddleware",
 ]
 
@@ -254,3 +255,60 @@ LOGGING = {
 
 # Store log file path for access by views
 CURRENT_LOG_FILE = LOG_FILE
+
+# Website analytics settings
+WEBSITE_ANALYTICS_ENABLED = os.environ.get("WEBSITE_ANALYTICS_ENABLED", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+WEBSITE_ANALYTICS_TIMESCALE_ENABLED = os.environ.get(
+    "WEBSITE_ANALYTICS_TIMESCALE_ENABLED", "1"
+).lower() in ("1", "true", "yes")
+WEBSITE_ANALYTICS_EXCLUDED_PATH_PREFIXES = (
+    "/api/",
+    "/static/",
+    "/media/",
+    "/metrics/",
+    "/prometheus/",
+    "/health",
+    "/ping",
+    "/favicon.ico",
+)
+WEBSITE_ANALYTICS_SENSITIVE_QUERY_PARAM_DENYLIST = {
+    "password",
+    "passwd",
+    "pwd",
+    "token",
+    "access_token",
+    "refresh_token",
+    "authorization",
+    "auth",
+    "code",
+    "secret",
+    "apikey",
+    "api_key",
+    "key",
+    "session",
+    "sessionid",
+    "csrf",
+    "csrftoken",
+}
+WEBSITE_ANALYTICS_LOCATION_HEADER_MAP = {
+    "country": (
+        "CF-IPCountry",
+        "X-Country-Code",
+        "X-AppEngine-Country",
+        "CloudFront-Viewer-Country",
+    ),
+    "state": (
+        "X-Region-Code",
+        "X-Region",
+        "CloudFront-Viewer-Country-Region",
+    ),
+    "city": (
+        "X-City",
+        "X-AppEngine-City",
+        "CloudFront-Viewer-City",
+    ),
+}
